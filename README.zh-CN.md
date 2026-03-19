@@ -206,7 +206,7 @@ npx @modelcontextprotocol/inspector python mcp-servers/midi-analyzer/server.py
 
 ## 🐙 GitHub 仓库
 
-> 链接将在演示幻灯片（第 14 周）中添加。
+[YuenSzeHong/com6104-project](https://github.com/YuenSzeHong/com6104-project)
 
 ---
 

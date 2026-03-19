@@ -210,7 +210,7 @@ The project uses a sliding-window `ShortTermMemory` implementation:
 
 ## GitHub Repository
 
-> Link will be added on the presentation slide (Week 14).
+[YuenSzeHong/com6104-project](https://github.com/YuenSzeHong/com6104-project)
 
 ---
 
