@@ -1,0 +1,1009 @@
+<div class="mr-tab-content active text-center pt-5">
+        <h2 lang="ja" class="font-jp1 song-name size-20 no-line-height">ray</h2>
+        
+        <h2 class="text-center size-16 translate-zh">光芒</h2>
+        
+        <h3 lang="ja" class="font-jp2 text-center size-18 no-line-height mt-4">かぐや(<ruby><rb>夏吉</rb><rt>なつよし</rt></ruby>ゆうこ)、<ruby><rb>月見</rb><rt>るなみ</rt></ruby><ruby><rb>ヤチヨ</rb><rt>やちよ</rt></ruby>(<ruby><rb>早見沙織</rb><rt>はやみさおり</rt></ruby>)</h3>
+        
+        <h2 class="text-center size-14 translate-zh">輝耀(夏吉優子)、月見八千代(早見沙織)</h2>
+        
+        <hr class="ve-hr-style10 my-0 mb-1">
+        <div class="mr-lyrics-toolbar d-flex flex-wrap align-items-center my-2">
+          <div class="btn-group">
+            <button type="button" class="btn btn-secondary btn-sm evt-scroll-lyrics size-12 size-md-14">歌詞跟隨</button>
+            <button type="button" class="btn btn-secondary btn-sm evt-translate-en size-12 size-md-14 " style="">英文翻譯</button>
+            <!--<a href="japanese-song/quiz-evr84x6xnm" target="_blank" class="btn btn-secondary btn-sm size-12 size-md-14">歌詞測驗</a>-->
+            <a href="japanese-song/export-evr84x6xnm" target="_blank" class="btn btn-secondary btn-sm size-12 size-md-14" data-jzz-gui-player="true"><i class="bi bi-download"></i> 匯出歌詞 <span class="badge badge-danger" title="已匯出次數">8</span></a>
+          </div>
+        </div>
+        <ul id="lyrics-list" class="google-anno-skip">
+
+          <li id="lyrics-262395" class="mr-lyrics-list" data-num="1">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="1">1</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">お<ruby><rb>別</rb><rt>わか</rt></ruby>れしたのはもっと <ruby><rb>前</rb><rt>まえ</rt></ruby>の<ruby><rb>事</rb><rt>こと</rt></ruby>だったような</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">分別的事彷彿是更久以前發生的</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">It feels like our goodbye was, A long time ago</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="1"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="1"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="1"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262396" class="mr-lyrics-list" data-num="2">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="2">2</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>悲</rb><rt>かな</rt></ruby>しい<ruby><rb>光</rb><rt>ひかり</rt></ruby>は<ruby><rb>封</rb><rt>ふう</rt></ruby>じ<ruby><rb>込</rb><rt>こ</rt></ruby>めて <ruby><rb>踵</rb><rt>かかと</rt></ruby>すり<ruby><rb>減</rb><rt>へ</rt></ruby>らしたんだ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">將悲傷的光芒封存起來 磨損了鞋跟</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Locking away the sorrowful glimmer, I've worn down the heels of my shoes</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="2"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="2"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="2"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262398" class="mr-lyrics-list" data-num="3">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="3">3</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>君</rb><rt>きみ</rt></ruby>といた<ruby><rb>時</rb><rt>とき</rt></ruby>は<ruby><rb>見</rb><rt>み</rt></ruby>えた <ruby><rb>今</rb><rt>いま</rt></ruby>は<ruby><rb>見</rb><rt>み</rt></ruby>えなくなった</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">與你在一起時曾看見的如今已不復見</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">What I could see when I was with you, I can't see it anymore</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="3"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="3"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="3"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262399" class="mr-lyrics-list" data-num="4">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="4">4</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>透明</rb><rt>とうめい</rt></ruby>な<ruby><rb>彗星</rb><rt>すいせい</rt></ruby>をぼんやりと でもそれだけ<ruby><rb>探</rb><rt>さが</rt></ruby>している</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">隱約地看著那顆透明的彗星 但我只是不斷尋找著它</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">The transparent comet so faint, But it's all I'm searching for</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="4"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="4"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="4"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262401" class="mr-lyrics-list" data-num="5">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="5">5</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">しょっちゅう<ruby><rb>唄</rb><rt>うた</rt></ruby>を<ruby><rb>歌</rb><rt>うた</rt></ruby>ったよ その<ruby><rb>時</rb><rt>とき</rt></ruby>だけのメロディーを</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">那時我經常唱歌喔 唱著僅屬於那個當下的旋律</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">I was singing day and night, The melody of the moment</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="5"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="5"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="5"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262402" class="mr-lyrics-list" data-num="6">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="6">6</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>寂</rb><rt>さび</rt></ruby>しくなんかなかったよ ちゃんと<ruby><rb>寂</rb><rt>さび</rt></ruby>しくなれたから</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">我一點也不覺得寂寞喔 因為我已經能好好地感受寂寞了</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">No, I wasn't lonely, Because I came eye-to-eye With the loneliness</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="6"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="6"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="6"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262404" class="mr-lyrics-list" data-num="7">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="7">7</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">いつまでどこまでなんて <ruby><rb>正常</rb><rt>せいじょう</rt></ruby>か<ruby><rb>異常</rb><rt>いじょう</rt></ruby>かなんて</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">要到何時 要到何處 是否正常 是否異常</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">How long or how far I'll go, Whether I'm sane or not</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="7"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="7"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="7"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262405" class="mr-lyrics-list" data-num="8">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="8">8</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>考</rb><rt>かんが</rt></ruby>える<ruby><rb>暇</rb><rt>ひま</rt></ruby>も<ruby><rb>無</rb><rt>な</rt></ruby>い<ruby><rb>程</rb><rt>ほど</rt></ruby> <ruby><rb>歩</rb><rt>ある</rt></ruby>くのは<ruby><rb>大変</rb><rt>たいへん</rt></ruby>だ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">連思考的空閒都沒有 走路是如此艱難</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">It's so tiring to keep walking, I can't even think</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="8"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="8"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="8"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262406" class="mr-lyrics-list" data-num="9">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="9">9</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>楽</rb><rt>たの</rt></ruby>しい<ruby><rb>方</rb><rt>ほう</rt></ruby>がずっといいよ ごまかして<ruby><rb>笑</rb><rt>わら</rt></ruby>っていくよ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">開心的話好得多啊 就敷衍地笑著過下去吧</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Life's better when you're grooving, So I'll laugh it away</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="9"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="9"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="9"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262407" class="mr-lyrics-list" data-num="10">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="10">10</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>大丈夫</rb><rt>だいじょうぶ</rt></ruby>だ あの<ruby><rb>痛</rb><rt>いた</rt></ruby>みは <ruby><rb>忘</rb><rt>わす</rt></ruby>れたって<ruby><rb>消</rb><rt>き</rt></ruby>えやしない</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">沒關係的 那份痛楚 即使忘記也不會消失</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Don't worry, that pain won't go away, Even if I forget</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="10"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="10"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="10"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262409" class="mr-lyrics-list" data-num="11">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="11">11</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>理想</rb><rt>りそう</rt></ruby>で<ruby><rb>作</rb><rt>つく</rt></ruby>った<ruby><rb>道</rb><rt>みち</rt></ruby>を <ruby><rb>現実</rb><rt>げんじつ</rt></ruby>が<ruby><rb>塗</rb><rt>ぬ</rt></ruby>り<ruby><rb>替</rb><rt>か</rt></ruby>えていくよ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">現實正不斷抹去由理想鋪成的道路</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Reality is painting over, The road paved with ideals</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="11"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="11"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="11"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262410" class="mr-lyrics-list" data-num="12">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="12">12</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>思</rb><rt>おも</rt></ruby>い<ruby><rb>出</rb><rt>で</rt></ruby>はその<ruby><rb>軌跡</rb><rt>きせき</rt></ruby>の<ruby><rb>上</rb><rt>うえ</rt></ruby>で <ruby><rb>輝</rb><rt>かがや</rt></ruby>きになって<ruby><rb>残</rb><rt>のこ</rt></ruby>っている</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">而回憶在那些軌跡之上 化作光輝殘留了下來</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Leaving just the sparkle of memories, On the path</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="12"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="12"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="12"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262412" class="mr-lyrics-list" data-num="13">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="13">13</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">お<ruby><rb>別</rb><rt>わか</rt></ruby>れしたのは<ruby><rb>何</rb><rt>なん</rt></ruby>で <ruby><rb>何</rb><rt>なん</rt></ruby>のためだったんだろうな</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">為什麼要分別 究竟是為了什麼呢</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">I wonder, What our farewell was for</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="13"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="13"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="13"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262413" class="mr-lyrics-list" data-num="14">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="14">14</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>悲</rb><rt>かな</rt></ruby>しい<ruby><rb>光</rb><rt>ひかり</rt></ruby>が<ruby><rb>僕</rb><rt>ぼく</rt></ruby>の<ruby><rb>影</rb><rt>かげ</rt></ruby>を <ruby><rb>前</rb><rt>まえ</rt></ruby>に<ruby><rb>長</rb><rt>なが</rt></ruby>く<ruby><rb>伸</rb><rt>の</rt></ruby>ばしている</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">悲傷的光芒 將我的影子在前方拉得很長很長</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">The sorrowful glimmer, Stretches my shadow out far before me</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="14"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="14"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="14"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262415" class="mr-lyrics-list" data-num="15">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="15">15</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>時々</rb><rt>ときどき</rt></ruby><ruby><rb>熱</rb><rt>ねつ</rt></ruby>が<ruby><rb>出</rb><rt>で</rt></ruby>るよ <ruby><rb>時間</rb><rt>じかん</rt></ruby>がある<ruby><rb>時</rb><rt>とき</rt></ruby><ruby><rb>眠</rb><rt>ねむ</rt></ruby>るよ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">偶爾會發燒喔 有時間的時候就會睡覺喔</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Sometimes, I have a fever, When I have time, I catch some sleep</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="15"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="15"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="15"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="p-1 w-100">
+            <div class="ad-container my-2">
+              <!-- 300×250 -->
+<ins class="adsbygoogle" style="display:inline-block;width:300px;height:250px" data-ad-client="ca-pub-7999503139787066" data-ad-slot="7751377056" data-adsbygoogle-status="done"><iframe id="aswift_3" style="height: 1px !important; max-height: 1px !important; max-width: 1px !important; width: 1px !important;"><iframe id="google_ads_frame3"></iframe></iframe></ins>
+<script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+            </div>
+          </li>
+
+          <li id="lyrics-262416" class="mr-lyrics-list" data-num="16">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="16">16</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>夢</rb><rt>ゆめ</rt></ruby>だと<ruby><rb>解</rb><rt>わか</rt></ruby>るその<ruby><rb>中</rb><rt>なか</rt></ruby>で <ruby><rb>君</rb><rt>きみ</rt></ruby>と<ruby><rb>会</rb><rt>あ</rt></ruby>ってからまた<ruby><rb>行</rb><rt>い</rt></ruby>こう</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">在那個明知是夢的夢境裡 與你見上一面後 再重新啟程吧</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">I'll see you in my dreams, And then we'll continue our journey</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="16"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="16"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="16"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262418" class="mr-lyrics-list" data-num="17">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="17">17</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>晴天</rb><rt>せいてん</rt></ruby>とはほど<ruby><rb>遠</rb><rt>とお</rt></ruby>い <ruby><rb>終</rb><rt>お</rt></ruby>わらない<ruby><rb>暗闇</rb><rt>くらやみ</rt></ruby>にも</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">即使身處與晴天相去甚遠 永無止盡的黑暗中</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Even in endless darkness, Far from clear skies</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="17"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="17"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="17"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262419" class="mr-lyrics-list" data-num="18">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="18">18</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>星</rb><rt>ほし</rt></ruby>を<ruby><rb>思</rb><rt>おも</rt></ruby>い<ruby><rb>浮</rb><rt>う</rt></ruby>かべたなら すぐ<ruby><rb>銀河</rb><rt>ぎんが</rt></ruby>の<ruby><rb>中</rb><rt>なか</rt></ruby>だ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">只要腦海中浮現星星 便能立刻置身於銀河之中</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Remember the stars, And we'll find ourselves in the Milky Way</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="18"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="18"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="18"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262420" class="mr-lyrics-list" data-num="19">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="19">19</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">あまり<ruby><rb>泣</rb><rt>な</rt></ruby>かなくなっても <ruby><rb>靴</rb><rt>くつ</rt></ruby>を<ruby><rb>新</rb><rt>あたら</rt></ruby>しくしても</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">就算變得不怎麼流淚了 就算換了新鞋子</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Though we have grown to rarely cry, And we've got new pairs of shoes</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="19"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="19"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="19"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262421" class="mr-lyrics-list" data-num="20">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="20">20</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>大丈夫</rb><rt>だいじょうぶ</rt></ruby>だ あの<ruby><rb>痛</rb><rt>いた</rt></ruby>みは <ruby><rb>忘</rb><rt>わす</rt></ruby>れたって<ruby><rb>消</rb><rt>き</rt></ruby>えやしない</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">沒關係的 那份痛楚 即使忘記也不會消失</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Don't worry, that pain won't go away, Even if we forget</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="20"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="20"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="20"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262423" class="mr-lyrics-list" data-num="21">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="21">21</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>伝</rb><rt>つた</rt></ruby>えたかった<ruby><rb>事</rb><rt>こと</rt></ruby>が きっとあったんだろうな</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">想要傳達的事情 肯定是有的吧</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">I think there was something I wanted to tell you</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="21"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="21"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="21"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262424" class="mr-lyrics-list" data-num="22">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="22">22</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>恐</rb><rt>おそ</rt></ruby>らくありきたりなんだろうけど こんなにも</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">雖然恐怕只是些平凡無奇的話 卻又是如此地…</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Probably nothing special, But still…</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="22"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="22"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="22"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262426" class="mr-lyrics-list" data-num="23">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="23">23</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">お<ruby><rb>別</rb><rt>わか</rt></ruby>れした<ruby><rb>事</rb><rt>こと</rt></ruby>は <ruby><rb>出会</rb><rt>であ</rt></ruby>った<ruby><rb>事</rb><rt>こと</rt></ruby>と<ruby><rb>繋</rb><rt>つな</rt></ruby>がっている</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">「離別」這件事 是與「相遇」相連在一起的</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Our farewell is tied, To the day we met</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="23"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="23"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="23"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262427" class="mr-lyrics-list" data-num="24">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="24">24</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">あの<ruby><rb>透明</rb><rt>とうめい</rt></ruby>な<ruby><rb>彗星</rb><rt>すいせい</rt></ruby>は <ruby><rb>透明</rb><rt>とうめい</rt></ruby>だから<ruby><rb>無</rb><rt>な</rt></ruby>くならない</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">那顆透明的彗星 正因為它是透明的 所以永遠不會消失</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">That transparent comet Will never disappear, Because it's transparent</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="24"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="24"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="24"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262429" class="mr-lyrics-list" data-num="25">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="25">25</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>○</rb><rt>まる</rt></ruby><ruby><rb>✕</rb><rt>ばつ</rt></ruby><ruby><rb>△</rb><rt>さんかく</rt></ruby>どれかなんて <ruby><rb>皆</rb><rt>みんな</rt></ruby>と<ruby><rb>比</rb><rt>くら</rt></ruby>べてどうかなんて</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">是圓是叉還是三角 或是與其他人相比又如何</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Whether it's great, okay, or poor, Or if I'm better than everyone else</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="25"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="25"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="25"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262430" class="mr-lyrics-list" data-num="26">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="26">26</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>確</rb><rt>たし</rt></ruby>かめる<ruby><rb>間</rb><rt>ま</rt></ruby>も<ruby><rb>無</rb><rt>な</rt></ruby>い<ruby><rb>程</rb><rt>ほど</rt></ruby> <ruby><rb>生</rb><rt>い</rt></ruby>きるのは<ruby><rb>最高</rb><rt>さいこう</rt></ruby>だ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">連確認的時間都沒有 活著是最棒的</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Life is so wonderful, I don't have time to worry</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="26"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="26"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="26"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262431" class="mr-lyrics-list" data-num="27">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="27">27</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;">あまり<ruby><rb>泣</rb><rt>な</rt></ruby>かなくなっても ごまかして<ruby><rb>笑</rb><rt>わら</rt></ruby>っていくよ</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">即使變得不常哭泣了 也會敷衍地笑著過下去</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Though I have grown to rarely cry, I'll keep laughing it away</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="27"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="27"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="27"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li id="lyrics-262432" class="mr-lyrics-list" data-num="28">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="28">28</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>大丈夫</rb><rt>だいじょうぶ</rt></ruby>だ あの<ruby><rb>痛</rb><rt>いた</rt></ruby>みは <ruby><rb>忘</rb><rt>わす</rt></ruby>れたって<ruby><rb>消</rb><rt>き</rt></ruby>えやしない</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">沒關係的 那份痛楚 即使忘記也不會消失</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Don't worry, that pain won't go away, Even if I forget</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="28"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="28"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="28"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+          <li class="mr-lyrics-empty w-100"></li>
+
+          <li id="lyrics-262434" class="mr-lyrics-list" data-num="29">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="flex-shrink-0 lyrics-number evt-play-this" data-index="29">29</div>
+              <div class="flex-grow-1 text-left pl-2">
+                <div class="lyrics-source-display">
+                  <p lang="ja" class="lyrics-source font-jp1 no-line-height notranslate" style="font-size: 24px;"><ruby><rb>大丈夫</rb><rt>だいじょうぶ</rt></ruby>だ この<ruby><rb>光</rb><rt>ひかり</rt></ruby>の<ruby><rb>始</rb><rt>はじ</rt></ruby>まりには <ruby><rb>君</rb><rt>きみ</rt></ruby>がいる</p>
+                </div>
+                
+                <p class="lyrics-translate mt-1 translate-zh" style="">沒關係的 在這道光的起點 有你在</p>
+                
+                <p class="lyrics-translate-2 size-12 size-lg-14 mt-1 notranslate translate-en" style="display:none;">Don't worry, The beginning of this glimmer is, Where you are</p>
+                
+              </div>
+              
+              <div class="d-xl-none">
+                <div class="dropdown">
+                  <button type="button" class="btn circle-button" data-toggle="dropdown" data-display="static" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-right dropdown-menu-lg-left">
+                    <button type="button" class="dropdown-item evt-repeat-this" data-index="29"><i class="bi bi-repeat"></i> 重覆這句</button>
+                    <button type="button" class="dropdown-item evt-play-this" data-index="29"><i class="bi bi-play"></i> 播放這句</button>
+                    <button type="button" class="dropdown-item evt-pause"><i class="bi bi-pause"></i> 暫停</button>
+                    
+                    <button type="button" class="dropdown-item evt-lyrics-error-report" data-index="29"><i class="bi bi-bug"></i> 這句歌詞有錯誤</button>
+                    
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+          </li>
+
+        </ul>
+      </div>
