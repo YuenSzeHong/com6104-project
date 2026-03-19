@@ -28,10 +28,9 @@ uv.lock
 Thumbs.db
 
 # Project specific
-agent/.venv/
-agent/uv.lock
 *.mid
 *.abc
 *.txt
 !README.md
+!README.zh-CN.md
 !pyproject.toml
