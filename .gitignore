@@ -28,10 +28,17 @@ uv.lock
 Thumbs.db
 .env
 
-# Test files
+# Test files (ignore EVERYWHERE)
 *.mid
 *.txt
 *.abc
+
+# BUT KEEP them in test/ folder
+! test/*.mid
+! test/*.txt
+! test/*.abc
+
+# Output directory
 output/
 
 # Specification Given
