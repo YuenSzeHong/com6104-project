@@ -56,7 +56,7 @@ from .config import (
     PROVIDER,
     WORKFLOW_CONFIG,
 )
-from .mcp_utils import normalize_mcp_result
+from .utils.mcp import normalize_mcp_result
 from .memory import ShortTermMemory
 from .registry import AGENT_REGISTRY, MCP_REGISTRY
 
@@ -243,9 +243,6 @@ class AgentOrchestrator:
 
         logger.info("流水线开始 – midi=%s | text='%s'", midi_path, reference_text[:60])
 
-        self._memory.add_user_message(
-            f"请根据 MIDI 文件「{midi_path}」和以下参考文本，创作粤语歌词：\n\n{reference_text}"
-        )
         self._memory.set_artifact("source_text", reference_text)
         self._memory.set_run_status(
             stage="starting",
@@ -1004,7 +1001,10 @@ class AgentOrchestrator:
 
     @staticmethod
     def _render_prompt_template(template_name: str, **kwargs: Any) -> str:
-        template_path = PROMPTS_DIR / template_name
+        # Try agents/ subdirectory first, then fall back to prompts/ root
+        template_path = PROMPTS_AGENTS_DIR / template_name
+        if not template_path.exists():
+            template_path = PROMPTS_DIR / template_name
         return template_path.read_text(encoding="utf-8").format(**kwargs).strip()
 
     # ------------------------------------------------------------------
@@ -1018,11 +1018,34 @@ class AgentOrchestrator:
 
         Supported providers
         -------------------
-        ollama   – ChatOllama (langchain-ollama)
-        lmstudio – ChatOpenAI with custom base_url (langchain-openai)
-                   LM Studio exposes an OpenAI-compatible server on port 1234.
+        ollama        – ChatOllama (langchain-ollama)
+        ollama-cloud  – ChatOpenAI with ollama.com API (langchain-openai)
+        lmstudio      – ChatOpenAI with custom base_url (langchain-openai)
         """
-        if PROVIDER == "lmstudio":
+        if PROVIDER == "ollama-cloud":
+            # Ollama Cloud: OpenAI-compatible API at ollama.com/v1
+            from langchain_openai import ChatOpenAI
+
+            cfg = LLM_CONFIG
+            if not cfg.get("api_key"):
+                raise ValueError(
+                    "OLLAMA_API_KEY is required for ollama-cloud provider. "
+                    "Set it in .env or as environment variable."
+                )
+            logger.info(
+                "使用 Ollama Cloud 提供商  model=%s  base_url=%s",
+                cfg["model"],
+                cfg["base_url"],
+            )
+            return ChatOpenAI(
+                model=cfg["model"],
+                base_url=cfg["base_url"],
+                api_key=cfg["api_key"],
+                temperature=cfg["temperature"],
+                max_tokens=cfg.get("max_tokens", 8192),
+                extra_body={"thinking": False},
+            )
+        elif PROVIDER == "lmstudio":
             # LM Studio: OpenAI-compatible API, no real key needed
             from langchain_openai import ChatOpenAI
 
@@ -1037,11 +1060,10 @@ class AgentOrchestrator:
                 api_key=cfg["api_key"],
                 temperature=cfg["temperature"],
                 max_tokens=cfg.get("max_tokens", 8192),
-                # Disable reasoning/thinking to reduce latency
                 extra_body={"thinking": False},
             )
         else:
-            # Default: Ollama
+            # Default: Ollama (local)
             from langchain_ollama import ChatOllama
 
             cfg = LLM_CONFIG
@@ -1054,7 +1076,6 @@ class AgentOrchestrator:
                 base_url=cfg["base_url"],
                 temperature=cfg["temperature"],
                 num_ctx=cfg.get("num_ctx", 8192),
-                # Disable reasoning/thinking to reduce latency
                 num_predict=cfg.get("max_tokens", 8192),
             )
 

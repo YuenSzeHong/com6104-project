@@ -34,11 +34,12 @@ from dotenv import load_dotenv
 # Project paths
 # ---------------------------------------------------------------------------
 
-ROOT_DIR        = Path(__file__).resolve().parents[2]   # repo root
+ROOT_DIR = Path(__file__).resolve().parents[2]  # repo root
 MCP_SERVERS_DIR = ROOT_DIR / "mcp-servers"
-PROMPTS_DIR     = ROOT_DIR / "prompts"
-ENV_FILE        = ROOT_DIR / ".env"
-PYTHON_BIN      = sys.executable
+PROMPTS_DIR = ROOT_DIR / "prompts"
+PROMPTS_AGENTS_DIR = PROMPTS_DIR / "agents"
+ENV_FILE = ROOT_DIR / ".env"
+PYTHON_BIN = sys.executable
 
 # Load local development overrides from .env without clobbering shell-provided vars.
 load_dotenv(ENV_FILE, override=False)
@@ -47,7 +48,7 @@ load_dotenv(ENV_FILE, override=False)
 # Provider selection
 # ---------------------------------------------------------------------------
 
-ProviderName = Literal["ollama", "lmstudio"]
+ProviderName = Literal["ollama", "ollama-cloud", "lmstudio"]
 
 # Change this constant OR set env-var LLM_PROVIDER at runtime.
 DEFAULT_PROVIDER: ProviderName = "lmstudio"
@@ -62,10 +63,10 @@ PROVIDER: ProviderName = os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower()  # 
 # ---------------------------------------------------------------------------
 
 OLLAMA_CONFIG: dict[str, Any] = {
-    "model":       os.getenv("OLLAMA_MODEL",    "qwen3.5:4b"),
-    "base_url":    os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    "model": os.getenv("OLLAMA_MODEL", "qwen3.5:4b"),
+    "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
     "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
-    "num_ctx":     int(os.getenv("LLM_CTX",    "8192")),
+    "num_ctx": int(os.getenv("LLM_CTX", "8192")),
 }
 
 # ---------------------------------------------------------------------------
@@ -79,17 +80,40 @@ OLLAMA_CONFIG: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 LMSTUDIO_CONFIG: dict[str, Any] = {
-    "model":       os.getenv("LMSTUDIO_MODEL",    "qwen3.5-4b@q4_k_m"),
-    "base_url":    os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
-    # LM Studio does not require a real API key; the string below is a placeholder.
-    "api_key":     os.getenv("LMSTUDIO_API_KEY",  "lm-studio"),
+    "model": os.getenv("LMSTUDIO_MODEL", "qwen3.5-4b@q4_k_m"),
+    "base_url": os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
+    # LM Studio does not require a real API key;
+    # the string below is a placeholder.
+    "api_key": os.getenv("LMSTUDIO_API_KEY", "lm-studio"),
     "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
     # max_tokens maps to num_ctx equivalent for OpenAI-compat providers
-    "max_tokens":  int(os.getenv("LLM_CTX", "8192")),
+    "max_tokens": int(os.getenv("LLM_CTX", "8192")),
+}
+
+# ---------------------------------------------------------------------------
+# Ollama Cloud configuration  (cloud-hosted models via ollama.com API)
+#
+# Requires an Ollama.com account and API key.
+# Set OLLAMA_API_KEY env var or add to .env file.
+# Cloud models: glm-4.6:cloud, qwen3-coder:480b-cloud, etc.
+# See: https://docs.ollama.com/cloud
+# ---------------------------------------------------------------------------
+
+OLLAMA_CLOUD_CONFIG: dict[str, Any] = {
+    "model": os.getenv("OLLAMA_CLOUD_MODEL", "qwen3.5:cloud"),
+    "base_url": os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com/v1"),
+    "api_key": os.getenv("OLLAMA_API_KEY", ""),
+    "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
+    "max_tokens": int(os.getenv("LLM_CTX", "8192")),
 }
 
 # Resolved active LLM config (used by the orchestrator)
-LLM_CONFIG: dict[str, Any] = OLLAMA_CONFIG if PROVIDER == "ollama" else LMSTUDIO_CONFIG
+_PROVIDER_CONFIG_MAP: dict[ProviderName, dict[str, Any]] = {
+    "ollama": OLLAMA_CONFIG,
+    "ollama-cloud": OLLAMA_CLOUD_CONFIG,
+    "lmstudio": LMSTUDIO_CONFIG,
+}
+LLM_CONFIG: dict[str, Any] = _PROVIDER_CONFIG_MAP.get(PROVIDER, LMSTUDIO_CONFIG)
 
 # ---------------------------------------------------------------------------
 # Short-term memory configuration
@@ -97,7 +121,7 @@ LLM_CONFIG: dict[str, Any] = OLLAMA_CONFIG if PROVIDER == "ollama" else LMSTUDIO
 
 MEMORY_CONFIG: dict[str, Any] = {
     # Maximum conversation turns kept in the sliding window
-    "max_turns":         int(os.getenv("MEMORY_MAX_TURNS", "20")),
+    "max_turns": int(os.getenv("MEMORY_MAX_TURNS", "20")),
     # Shared system prompt file (Chinese)
     "system_prompt_file": PROMPTS_DIR / "system.md",
 }
@@ -118,15 +142,16 @@ MEMORY_CONFIG: dict[str, Any] = {
 # enabled     – set False to skip without deleting the entry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MCPServerConfig:
-    name:        str
-    command:     str
-    args:        list[str]
-    tool_names:  list[str]             = field(default_factory=list)
-    env:         dict[str, str]        = field(default_factory=dict)
-    description: str                   = ""
-    enabled:     bool                  = True
+    name: str
+    command: str
+    args: list[str]
+    tool_names: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+    description: str = ""
+    enabled: bool = True
 
     def to_langchain_params(self) -> dict[str, Any]:
         """
@@ -136,10 +161,10 @@ class MCPServerConfig:
         excluded from the MCP client params.
         """
         params: dict[str, Any] = {
-            "command":   self.command,
-            "args":      self.args,
+            "command": self.command,
+            "args": self.args,
             "transport": "stdio",
-            "encoding":  "utf-8",
+            "encoding": "utf-8",
             "encoding_error_handler": "replace",
         }
         if self.env:
@@ -148,7 +173,6 @@ class MCPServerConfig:
 
 
 MCP_SERVERS: list[MCPServerConfig] = [
-
     # ------------------------------------------------------------------
     # 1. Jyutping / 0243.hk IME engine
     #
@@ -158,20 +182,19 @@ MCP_SERVERS: list[MCPServerConfig] = [
     #   Mode 3 – Chinese prefix + tone digits → context-aware continuation
     # ------------------------------------------------------------------
     MCPServerConfig(
-        name        = "jyutping",
-        command     = PYTHON_BIN,
-        args        = [str(MCP_SERVERS_DIR / "jyutping" / "server.py")],
-        tool_names  = [
-            "query_raw",                # 直接透传 0243.hk API（全格式）
-            "chinese_to_jyutping",      # Mode 2：中文 → 粤拼候选列表
-            "get_tone_code",            # Mode 2：中文 → 数字声调码
-            "get_tone_pattern",         # Mode 2：中文 → 空格分隔声调序列
+        name="jyutping",
+        command=PYTHON_BIN,
+        args=[str(MCP_SERVERS_DIR / "jyutping" / "server.py")],
+        tool_names=[
+            "query_raw",  # 直接透传 0243.hk API（全格式）
+            "chinese_to_jyutping",  # Mode 2：中文 → 粤拼候选列表
+            "get_tone_code",  # Mode 2：中文 → 数字声调码
+            "get_tone_pattern",  # Mode 2：中文 → 空格分隔声调序列
             "find_words_by_tone_code",  # Mode 1：数字声调码 → 中文词语
-            "find_tone_continuation",   # Mode 3：中文前缀 + 声调数字 → 续词候选
+            "find_tone_continuation",  # Mode 3：中文前缀 + 声调数字 → 续词候选
         ],
-        description = "粤语 IME 引擎 – 通过 0243.hk API 提供粤拼转换、声调码查词及上下文续词",
+        description="粤语 IME 引擎 – 通过 0243.hk API 提供粤拼转换、声调码查词及上下文续词",
     ),
-
     # ------------------------------------------------------------------
     # 2. MIDI analyser
     #
@@ -180,17 +203,16 @@ MCP_SERVERS: list[MCPServerConfig] = [
     # moved here so they satisfy the spec's MCP testability requirement.
     # ------------------------------------------------------------------
     MCPServerConfig(
-        name        = "midi-analyzer",
-        command     = PYTHON_BIN,
-        args        = [str(MCP_SERVERS_DIR / "midi-analyzer" / "server.py")],
-        tool_names  = [
-            "analyze_midi",            # 完整 MIDI 元数据（音节数、速度、调性、强拍位置）
+        name="midi-analyzer",
+        command=PYTHON_BIN,
+        args=[str(MCP_SERVERS_DIR / "midi-analyzer" / "server.py")],
+        tool_names=[
+            "analyze_midi",  # 完整 MIDI 元数据（音节数、速度、调性、强拍位置）
             "get_syllable_durations",  # 每音符时值列表（秒）
-            "suggest_rhyme_positions", # 建议押韵位置索引
+            "suggest_rhyme_positions",  # 建议押韵位置索引
         ],
-        description = "MIDI 旋律分析 – 音节数、速度、调性、强拍位置（纯计算，无需 LLM）",
+        description="MIDI 旋律分析 – 音节数、速度、调性、强拍位置（纯计算，无需 LLM）",
     ),
-
     # ------------------------------------------------------------------
     # 3. Lyrics validator
     #
@@ -201,19 +223,18 @@ MCP_SERVERS: list[MCPServerConfig] = [
     # artistic-quality judgment on top.
     # ------------------------------------------------------------------
     MCPServerConfig(
-        name        = "lyrics-validator",
-        command     = PYTHON_BIN,
-        args        = [str(MCP_SERVERS_DIR / "lyrics-validator" / "server.py")],
-        tool_names  = [
-            "count_syllables",       # 统计汉字音节数（逐行分解）
-            "check_tone_accuracy",   # 0243 旋律贴合度：1-6 声调映射到 lean 0243 + 强拍检查
-            "check_rhyme_scheme",    # 押韵一致性：提取韵尾、多数原则评分
-            "score_lyrics",          # 综合评分：运行全部三项检查 + 生成修改建议
-            "suggest_corrections",   # 将评分报告转换为优先级排序的中文修改指令
+        name="lyrics-validator",
+        command=PYTHON_BIN,
+        args=[str(MCP_SERVERS_DIR / "lyrics-validator" / "server.py")],
+        tool_names=[
+            "count_syllables",  # 统计汉字音节数（逐行分解）
+            "check_tone_accuracy",  # 0243 旋律贴合度：1-6 声调映射到 lean 0243 + 强拍检查
+            "check_rhyme_scheme",  # 押韵一致性：提取韵尾、多数原则评分
+            "score_lyrics",  # 综合评分：运行全部三项检查 + 生成修改建议
+            "suggest_corrections",  # 将评分报告转换为优先级排序的中文修改指令
         ],
-        description = "歌词计算验证 – 音节计数、lean 0243 旋律贴合度、押韵分析、综合评分（纯计算，无需 LLM）",
+        description="歌词计算验证 – 音节计数、lean 0243 旋律贴合度、押韵分析、综合评分（纯计算，无需 LLM）",
     ),
-
     # ------------------------------------------------------------------
     # 4. Melody mapper (0243.hk lean mode)
     #
@@ -234,19 +255,18 @@ MCP_SERVERS: list[MCPServerConfig] = [
     #   - find_phrase_words        : Find multi-syllable phrase matches
     # ------------------------------------------------------------------
     MCPServerConfig(
-        name        = "melody-mapper",
-        command     = PYTHON_BIN,
-        args        = [str(MCP_SERVERS_DIR / "melody-mapper" / "server.py")],
-        tool_names  = [
-            "analyze_melody_contour",   # 完整旋律轮廓分析 → 0243 声调序列
-            "get_tone_requirements",    # 获取特定位置的声调需求
-            "suggest_tone_sequence",    # 简化版声调序列字符串
-            "find_words_by_melody",     # 根据旋律声调找词
-            "find_phrase_words",        # 多音节短语匹配
+        name="melody-mapper",
+        command=PYTHON_BIN,
+        args=[str(MCP_SERVERS_DIR / "melody-mapper" / "server.py")],
+        tool_names=[
+            "analyze_melody_contour",  # 完整旋律轮廓分析 → 0243 声调序列
+            "get_tone_requirements",  # 获取特定位置的声调需求
+            "suggest_tone_sequence",  # 简化版声调序列字符串
+            "find_words_by_melody",  # 根据旋律声调找词
+            "find_phrase_words",  # 多音节短语匹配
         ],
-        description = "旋律→0243 声调映射器 – 将 MIDI 旋律线映射到 0243.hk 精简声调系统",
+        description="旋律→0243 声调映射器 – 将 MIDI 旋律线映射到 0243.hk 精简声调系统",
     ),
-
     # ------------------------------------------------------------------
     # Template: add more MCP servers below
     # ------------------------------------------------------------------
@@ -258,7 +278,6 @@ MCP_SERVERS: list[MCPServerConfig] = [
     #     description = "新服务的描述",
     #     enabled     = False,   # 准备好后改为 True
     # ),
-
 ]
 
 # Convenience lookup: name → config
@@ -280,13 +299,14 @@ MCP_SERVER_MAP: dict[str, MCPServerConfig] = {s.name: s for s in MCP_SERVERS}
 # enabled               – set False to skip without deleting the entry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AgentConfig:
-    name:                  str
-    description:           str
-    allowed_mcp_servers:   list[str]    = field(default_factory=list)
-    prompt_file:           Path | None  = None
-    enabled:               bool         = True
+    name: str
+    description: str
+    allowed_mcp_servers: list[str] = field(default_factory=list)
+    prompt_file: Path | None = None
+    enabled: bool = True
 
     def __post_init__(self) -> None:
         if self.prompt_file is None:
@@ -319,7 +339,6 @@ class AgentConfig:
 # ---------------------------------------------------------------------------
 
 AGENTS: list[AgentConfig] = [
-
     # ------------------------------------------------------------------
     # 1. 歌词创作代理  (LLM agent)
     #
@@ -329,16 +348,15 @@ AGENTS: list[AgentConfig] = [
     #   - lyrics-validator → self-check before submitting draft
     # ------------------------------------------------------------------
     AgentConfig(
-        name        = "lyrics-composer",
-        description = (
+        name="lyrics-composer",
+        description=(
             "粤语歌词再创作代理（LLM 驱动）。"
             "主用途是将外语歌或现有歌词改编成可唱的粤语版本；"
             "若没有原歌词，也可根据主题或情景原创填词。"
         ),
-        allowed_mcp_servers = ["midi-analyzer", "jyutping", "lyrics-validator"],
-        prompt_file = PROMPTS_DIR / "lyrics-composer.md",
+        allowed_mcp_servers=["midi-analyzer", "jyutping", "lyrics-validator"],
+        prompt_file=PROMPTS_DIR / "lyrics-composer.md",
     ),
-
     # ------------------------------------------------------------------
     # 2. 验收代理  (LLM agent)
     #
@@ -346,16 +364,15 @@ AGENTS: list[AgentConfig] = [
     # an LLM-based artistic-quality judgment on top.
     # ------------------------------------------------------------------
     AgentConfig(
-        name        = "validator",
-        description = (
+        name="validator",
+        description=(
             "歌词验收代理（LLM 驱动）。"
             "调用 lyrics-validator MCP 工具完成可唱性检查（音节数、lean 0243 旋律贴合度、押韵），"
             "再由 LLM 评判艺术质量，给出是否接受当前改编结果及修改建议。"
         ),
-        allowed_mcp_servers = ["jyutping", "lyrics-validator"],
-        prompt_file = PROMPTS_DIR / "validator.md",
+        allowed_mcp_servers=["jyutping", "lyrics-validator"],
+        prompt_file=PROMPTS_DIR / "validator.md",
     ),
-
     # ------------------------------------------------------------------
     # 3. 选字代理  (LLM agent)
     #
@@ -363,16 +380,15 @@ AGENTS: list[AgentConfig] = [
     # 根据上下文、语义、韵律等因素进行智能选择。
     # ------------------------------------------------------------------
     AgentConfig(
-        name        = "word-selector",
-        description = (
+        name="word-selector",
+        description=(
             "选字代理（LLM 驱动）。"
             "从 0243.hk API 返回的候选词列表中选择最合适的词语，"
             "考虑语义连贯性、声调匹配、韵律协调、主题一致性等因素。"
         ),
-        allowed_mcp_servers = ["jyutping"],
-        prompt_file = PROMPTS_DIR / "word-selector-task.md",
+        allowed_mcp_servers=["jyutping"],
+        prompt_file=PROMPTS_DIR / "word-selector-task.md",
     ),
-
     # ------------------------------------------------------------------
     # Template: add more agents below
     # ------------------------------------------------------------------
@@ -382,7 +398,6 @@ AGENTS: list[AgentConfig] = [
     #     allowed_mcp_servers = ["jyutping", "lyrics-validator"],
     #     enabled     = False,
     # ),
-
 ]
 
 # Convenience lookup: name → config
@@ -396,7 +411,7 @@ WORKFLOW_CONFIG: dict[str, Any] = {
     # 创作→校验 最大重试轮数
     "max_revision_loops": int(os.getenv("MAX_REVISION_LOOPS", "3")),
     # 最低验收质量分（0–1）
-    "min_quality_score":  float(os.getenv("MIN_QUALITY_SCORE", "0.75")),
+    "min_quality_score": float(os.getenv("MIN_QUALITY_SCORE", "0.75")),
     # 是否将 LLM token 流式输出到 stdout
-    "stream_output":      os.getenv("STREAM_OUTPUT", "false").lower() == "true",
+    "stream_output": os.getenv("STREAM_OUTPUT", "false").lower() == "true",
 }
