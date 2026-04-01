@@ -55,16 +55,49 @@ mcp = FastMCP(
 
 # MIDI note number → pitch class name (sharps notation)
 _PITCH_CLASS: dict[int, str] = {
-    0: "C",  1: "C#", 2: "D",  3: "D#", 4: "E",
-    5: "F",  6: "F#", 7: "G",  8: "G#", 9: "A",
-    10: "A#", 11: "B",
+    0: "C",
+    1: "C#",
+    2: "D",
+    3: "D#",
+    4: "E",
+    5: "F",
+    6: "F#",
+    7: "G",
+    8: "G#",
+    9: "A",
+    10: "A#",
+    11: "B",
 }
 
 # Simple key-detection weight table (Krumhansl-Schmuckler tonal profiles)
-_MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09,
-                  2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
-_MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53,
-                  2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+_MAJOR_PROFILE = [
+    6.35,
+    2.23,
+    3.48,
+    2.33,
+    4.38,
+    4.09,
+    2.52,
+    5.19,
+    2.39,
+    3.66,
+    2.29,
+    2.88,
+]
+_MINOR_PROFILE = [
+    6.33,
+    2.68,
+    3.52,
+    5.38,
+    2.60,
+    3.53,
+    2.54,
+    4.75,
+    3.98,
+    2.69,
+    3.34,
+    3.17,
+]
 
 
 def _load_midi(file_path: str) -> mido.MidiFile:
@@ -114,7 +147,9 @@ def _extract_note_events(mid: mido.MidiFile) -> list[dict[str, Any]]:
     raw_events.sort(key=lambda x: x[0])
 
     # Build absolute-time-in-seconds mapping + extract note on/off pairs
-    pending: dict[tuple[int, int], tuple[int, float]] = {}  # (channel, note) → (tick, sec)
+    pending: dict[
+        tuple[int, int], tuple[int, float]
+    ] = {}  # (channel, note) → (tick, sec)
     completed: list[dict[str, Any]] = []
     current_sec = 0.0
     last_tick = 0
@@ -139,35 +174,41 @@ def _extract_note_events(mid: mido.MidiFile) -> list[dict[str, Any]]:
                 start_tick, start_sec = pending.pop(key)
                 duration_sec = current_sec - start_sec
                 if duration_sec > 0:
-                    completed.append({
-                        "note":         msg.note,  # type: ignore[attr-defined]
-                        "velocity":     msg.velocity,  # type: ignore[attr-defined]
-                        "start_tick":   start_tick,
-                        "end_tick":     abs_tick,
-                        "start_sec":    round(start_sec, 6),
-                        "duration_sec": round(duration_sec, 6),
-                        "channel":      msg.channel,  # type: ignore[attr-defined]
-                    })
+                    completed.append(
+                        {
+                            "note": msg.note,  # type: ignore[attr-defined]
+                            "velocity": msg.velocity,  # type: ignore[attr-defined]
+                            "start_tick": start_tick,
+                            "end_tick": abs_tick,
+                            "start_sec": round(start_sec, 6),
+                            "duration_sec": round(duration_sec, 6),
+                            "channel": msg.channel,  # type: ignore[attr-defined]
+                        }
+                    )
 
     # Close any still-open notes (file ended without note_off)
     for (channel, note), (start_tick, start_sec) in pending.items():
         duration_sec = current_sec - start_sec
         if duration_sec > 0:
-            completed.append({
-                "note":         note,
-                "velocity":     64,
-                "start_tick":   start_tick,
-                "end_tick":     last_tick,
-                "start_sec":    round(start_sec, 6),
-                "duration_sec": round(duration_sec, 6),
-                "channel":      channel,
-            })
+            completed.append(
+                {
+                    "note": note,
+                    "velocity": 64,
+                    "start_tick": start_tick,
+                    "end_tick": last_tick,
+                    "start_sec": round(start_sec, 6),
+                    "duration_sec": round(duration_sec, 6),
+                    "channel": channel,
+                }
+            )
 
     completed.sort(key=lambda e: e["start_sec"])
     return completed
 
 
-def _group_events_by_channel(note_events: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+def _group_events_by_channel(
+    note_events: list[dict[str, Any]],
+) -> dict[int, list[dict[str, Any]]]:
     grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for ev in note_events:
         grouped[int(ev["channel"])].append(ev)
@@ -218,7 +259,11 @@ def _extract_top_note_line(
     for group in groups:
         chosen = max(
             group,
-            key=lambda ev: (int(ev["note"]), float(ev["duration_sec"]), int(ev["velocity"])),
+            key=lambda ev: (
+                int(ev["note"]),
+                float(ev["duration_sec"]),
+                int(ev["velocity"]),
+            ),
         )
         topline.append(dict(chosen))
     topline.sort(key=lambda e: e["start_sec"])
@@ -241,7 +286,9 @@ def _merge_melody_ornaments(
             curr_end = float(curr["start_sec"]) + float(curr["duration_sec"])
             prev_end = float(prev["start_sec"]) + float(prev["duration_sec"])
             prev["end_tick"] = curr["end_tick"]
-            prev["duration_sec"] = round(max(prev_end, curr_end) - float(prev["start_sec"]), 6)
+            prev["duration_sec"] = round(
+                max(prev_end, curr_end) - float(prev["start_sec"]), 6
+            )
             if int(curr["note"]) > int(prev["note"]):
                 prev["note"] = curr["note"]
                 prev["velocity"] = curr["velocity"]
@@ -342,8 +389,8 @@ def _get_xf_melody_channel(file_path: str) -> int | None:
 def _decode_lyric_bytes(data: bytes, *, prefer_xf: bool = False) -> str:
     encodings = (
         ["cp932", "shift_jis", "euc_jp", "gbk", "utf-8"]
-        if prefer_xf else
-        ["euc_jp", "cp932", "shift_jis", "gbk", "utf-8"]
+        if prefer_xf
+        else ["euc_jp", "cp932", "shift_jis", "gbk", "utf-8"]
     )
     for enc in encodings:
         try:
@@ -410,7 +457,9 @@ def _extract_standard_lyrics(mid: mido.MidiFile) -> list[str]:
     return units
 
 
-def _extract_embedded_lyrics(mid: mido.MidiFile, file_path: str) -> tuple[list[str], str | None]:
+def _extract_embedded_lyrics(
+    mid: mido.MidiFile, file_path: str
+) -> tuple[list[str], str | None]:
     if _is_yamaha_xf(mid):
         xf_units = _extract_xf_lyrics(file_path)
         if xf_units:
@@ -545,7 +594,8 @@ def _find_phrase_endings(
     """
     Identify phrase-ending syllable indices by finding large gaps between notes.
 
-    A gap >= 1.5× the median inter-onset interval is treated as a phrase boundary.
+    Uses a higher threshold (2.0× median IOI) and requires a minimum absolute
+    gap (>= 0.5 seconds) to avoid false positives in fast-paced melodies.
     """
     if len(note_events) < 2:
         return []
@@ -559,7 +609,8 @@ def _find_phrase_endings(
         return []
 
     median_ioi = statistics.median(ioi_list)
-    threshold = median_ioi * 1.5
+    # Use the larger of 2.0× median or 0.5s absolute minimum
+    threshold = max(median_ioi * 2.0, 0.5)
 
     endings: list[int] = []
     for i, ioi in enumerate(ioi_list):
@@ -571,6 +622,65 @@ def _find_phrase_endings(
         endings.append(len(note_events) - 1)
 
     return sorted(set(endings))
+
+
+def _build_phrase_segments(
+    melody_notes: list[dict[str, Any]],
+    phrase_end_indices: list[int],
+) -> list[dict[str, Any]]:
+    """
+    Build phrase segments from melody notes and phrase end indices.
+
+    Each segment represents one lyric line, with:
+    - start_idx, end_idx: syllable range (inclusive)
+    - note_count: number of syllables in this phrase
+    - duration_sec: total duration of the phrase
+    - gap_before_sec: gap before this phrase (0 for first phrase)
+
+    Returns a list of segment dicts.
+    """
+    if not melody_notes:
+        return []
+
+    segments: list[dict[str, Any]] = []
+    prev_end = -1
+
+    for phrase_end_idx in phrase_end_indices:
+        start_idx = prev_end + 1
+        end_idx = phrase_end_idx
+
+        if start_idx > end_idx or end_idx >= len(melody_notes):
+            continue
+
+        # Calculate phrase duration
+        start_sec = float(melody_notes[start_idx]["start_sec"])
+        end_sec = float(melody_notes[end_idx]["start_sec"]) + float(
+            melody_notes[end_idx]["duration_sec"]
+        )
+        duration = end_sec - start_sec
+
+        # Calculate gap before this phrase
+        gap_before = 0.0
+        if prev_end >= 0 and prev_end + 1 < len(melody_notes):
+            gap_before = float(melody_notes[start_idx]["start_sec"]) - (
+                float(melody_notes[prev_end]["start_sec"])
+                + float(melody_notes[prev_end]["duration_sec"])
+            )
+            gap_before = max(0.0, gap_before)
+
+        segments.append(
+            {
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+                "note_count": end_idx - start_idx + 1,
+                "duration_sec": round(duration, 3),
+                "gap_before_sec": round(gap_before, 3),
+            }
+        )
+
+        prev_end = end_idx
+
+    return segments
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +747,10 @@ def analyze_midi(file_path: str) -> str:
             melody_notes, ticks_per_beat, numerator
         )
 
+        # Phrase boundaries for lyric line breaks
+        phrase_ends = _find_phrase_endings(melody_notes, ticks_per_beat)
+        phrase_boundaries = _build_phrase_segments(melody_notes, phrase_ends)
+
         # Total duration
         duration_sec = (
             melody_notes[-1]["start_sec"] + melody_notes[-1]["duration_sec"]
@@ -645,21 +759,23 @@ def analyze_midi(file_path: str) -> str:
         )
 
         result = {
-            "syllable_count":        effective_syllable_count,
-            "note_syllable_count":   note_syllable_count,
+            "syllable_count": effective_syllable_count,
+            "note_syllable_count": note_syllable_count,
             "effective_syllable_count": effective_syllable_count,
             "effective_syllable_count_source": effective_syllable_count_source,
-            "bpm":                   bpm,
-            "key":                   key,
-            "time_signature":        time_sig_str,
-            "note_count":            len(note_events),
+            "bpm": bpm,
+            "key": key,
+            "time_signature": time_sig_str,
+            "note_count": len(note_events),
             "strong_beat_positions": strong_beats,
-            "duration_seconds":      round(duration_sec, 3),
-            "ticks_per_beat":        ticks_per_beat,
-            "track_count":           len(mid.tracks),
-            "is_xf":                is_xf,
-            "xf_melody_channel":    xf_melody_channel,
-            "melody_channel":       melody_channel,
+            "phrase_boundaries": phrase_boundaries,
+            "phrase_end_indices": phrase_ends,
+            "duration_seconds": round(duration_sec, 3),
+            "ticks_per_beat": ticks_per_beat,
+            "track_count": len(mid.tracks),
+            "is_xf": is_xf,
+            "xf_melody_channel": xf_melody_channel,
+            "melody_channel": melody_channel,
             "melody_selection_reason": selection_reason,
             "embedded_lyrics_source": embedded_source,
             "embedded_lyric_unit_count": len(embedded_lyrics),
@@ -771,16 +887,24 @@ def suggest_rhyme_positions(file_path: str) -> str:
 
         phrase_ends = _find_phrase_endings(melody_notes, ticks_per_beat)
 
-        # Also add every 8th note index as a secondary suggestion if the MIDI
-        # is long enough (covers songs without obvious gap-based phrase endings)
+        # Add regular phrase boundaries every 8 syllables as a fallback
+        # Only add positions NOT already covered by gap-based detection
         syllable_count = len(melody_notes)
         regular_positions: list[int] = []
         if syllable_count >= 8:
-            step = max(4, syllable_count // 8)
+            # Use 8-syllable phrases (typical for Cantonese pop songs)
+            step = 8
             regular_positions = list(range(step - 1, syllable_count, step))
 
-        # Merge and deduplicate
+        # Merge: prefer phrase_ends (gap-based), fill gaps with regular positions
         combined = sorted(set(phrase_ends + regular_positions))
+
+        # Limit to a reasonable number (max ~15% of syllables)
+        max_rhymes = max(4, syllable_count // 6)
+        if len(combined) > max_rhymes:
+            # Keep the most significant ones: prioritize phrase_ends, then regular
+            combined = (phrase_ends + regular_positions)[:max_rhymes]
+            combined = sorted(set(combined))
 
         # Ensure the last syllable is always included
         last = syllable_count - 1
