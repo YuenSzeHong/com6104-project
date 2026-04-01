@@ -38,6 +38,7 @@ Usage
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -51,7 +52,6 @@ from .config import (
     AGENTS,
     LLM_CONFIG,
     MEMORY_CONFIG,
-    MCP_SERVER_MAP,
     PROMPTS_DIR,
     PROVIDER,
     WORKFLOW_CONFIG,
@@ -258,30 +258,38 @@ class AgentOrchestrator:
             # ----------------------------------------------------------
             # Step 1a: 直接调用 MCP 工具完成 MIDI 分析（无 LLM）
             # ----------------------------------------------------------
-            logger.info("Step 1a: 调用 MCP 工具分析 MIDI 文件…")
-            midi_analysis = await self._call_tool_direct(
+            logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
+
+            # 并行调用 MIDI analyzer 的三个工具
+            midi_task = self._call_tool_direct(
                 server_name="midi-analyzer",
                 tool_name="analyze_midi",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
             )
-            result.midi_analysis = midi_analysis if isinstance(midi_analysis, dict) else {}
-
-            durations = await self._call_tool_direct(
+            durations_task = self._call_tool_direct(
                 server_name="midi-analyzer",
                 tool_name="get_syllable_durations",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
             )
-            result.midi_analysis["syllable_durations"] = (
-                durations if isinstance(durations, list) else []
-            )
-
-            rhyme_positions_raw = await self._call_tool_direct(
+            rhyme_task = self._call_tool_direct(
                 server_name="midi-analyzer",
                 tool_name="suggest_rhyme_positions",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
+            )
+
+            # 等待所有任务完成
+            midi_analysis, durations, rhyme_positions_raw = await asyncio.gather(
+                midi_task, durations_task, rhyme_task,
+                return_exceptions=True,
+            )
+
+            # 处理结果
+            result.midi_analysis = midi_analysis if isinstance(midi_analysis, dict) else {}
+            result.midi_analysis["syllable_durations"] = (
+                durations if isinstance(durations, list) else []
             )
             rhyme_positions: list[int] = (
                 rhyme_positions_raw if isinstance(rhyme_positions_raw, list) else []
@@ -303,16 +311,43 @@ class AgentOrchestrator:
             )
 
             # ----------------------------------------------------------
-            # Step 1b: 直接调用 MCP 工具完成 0243 旋律映射（无 LLM）
+            # Step 1b: 并行调用 MCP 工具完成 0243 旋律映射（无 LLM）
             # ----------------------------------------------------------
-            logger.info("Step 1b: 调用 MCP 工具映射 0243 旋律声调…")
+            logger.info("Step 1b: 并行调用 MCP 工具映射 0243 旋律声调…")
 
-            melody_analysis_raw = await self._call_tool_direct(
+            # 并行调用 melody-mapper 和 jyutping 工具
+            melody_task = self._call_tool_direct(
                 server_name="melody-mapper",
                 tool_name="analyze_melody_contour",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
             )
+            jp_task = self._call_tool_direct(
+                server_name="jyutping",
+                tool_name="chinese_to_jyutping",
+                args={"text": reference_text},
+                parse_json=True,
+            )
+            tone_pattern_task = self._call_tool_direct(
+                server_name="jyutping",
+                tool_name="get_tone_pattern",
+                args={"text": reference_text},
+                parse_json=False,
+            )
+            tone_codes_task = self._call_tool_direct(
+                server_name="jyutping",
+                tool_name="get_tone_code",
+                args={"text": reference_text},
+                parse_json=True,
+            )
+
+            # 等待所有任务完成
+            melody_analysis_raw, jp_candidates_raw, tone_pattern_raw, tone_codes_raw = await asyncio.gather(
+                melody_task, jp_task, tone_pattern_task, tone_codes_task,
+                return_exceptions=True,
+            )
+
+            # 处理结果
             melody_analysis: dict[str, Any] = (
                 melody_analysis_raw if isinstance(melody_analysis_raw, dict) else {}
             )
@@ -320,40 +355,16 @@ class AgentOrchestrator:
                 int(t) for t in melody_analysis.get("tone_sequence", [])
                 if isinstance(t, int | float | str) and str(t).isdigit()
             ]
-
-            result.midi_analysis["melody_0243"] = melody_analysis
-            self._memory.set_pipeline_value("melody_analysis", melody_analysis)
-
-            # ----------------------------------------------------------
-            # Step 1c: 直接调用 MCP 工具完成粤拼参考映射（无 LLM）
-            # ----------------------------------------------------------
-            logger.info("Step 1c: 调用 MCP 工具获取参考文本粤拼信息…")
-            jp_candidates_raw = await self._call_tool_direct(
-                server_name="jyutping",
-                tool_name="chinese_to_jyutping",
-                args={"text": reference_text},
-                parse_json=True,
-            )
             jp_candidates: list[str] = (
                 jp_candidates_raw if isinstance(jp_candidates_raw, list) else []
             )
-
-            tone_pattern_raw = await self._call_tool_direct(
-                server_name="jyutping",
-                tool_name="get_tone_pattern",
-                args={"text": reference_text},
-                parse_json=False,
-            ) or ""
-
-            tone_codes_raw = await self._call_tool_direct(
-                server_name="jyutping",
-                tool_name="get_tone_code",
-                args={"text": reference_text},
-                parse_json=True,
-            )
+            tone_pattern_raw = tone_pattern_raw or ""
             tone_codes: list[str] = (
                 tone_codes_raw if isinstance(tone_codes_raw, list) else []
             )
+
+            result.midi_analysis["melody_0243"] = melody_analysis
+            self._memory.set_pipeline_value("melody_analysis", melody_analysis)
 
             # Parse 1-6 Jyutping tone sequence from the space-separated pattern string
             reference_tone_sequence: list[int] = []
@@ -370,21 +381,86 @@ class AgentOrchestrator:
                     except ValueError:
                         pass
 
-            # Pre-query tone-constrained word candidates for each strong beat using 0243
-            strong_beat_candidates: dict[str, list[str]] = {}
-            for pos in strong_beats[:8]:   # limit to first 8 to avoid hammering API
+            # Pre-query tone-constrained word candidates using BATCH API call
+            # Collect all unique tone codes needed for strong beats and rhyme positions
+            logger.info("Step 1c: 批量查询声调码候选词...")
+
+            # Gather all positions that need candidate words
+            positions_needing_candidates = set()
+            positions_needing_candidates.update(str(p) for p in strong_beats[:16])  # First 16 strong beats
+            positions_needing_candidates.update(str(p) for p in rhyme_positions[:8])  # First 8 rhyme positions
+
+            # Map position -> tone code
+            position_tone_map: dict[str, str] = {}
+            for pos_str in positions_needing_candidates:
+                pos = int(pos_str)
                 beat_tone = (
                     str(melody_tone_sequence[pos])
                     if pos < len(melody_tone_sequence) else "4"
                 )
-                candidates_raw = await self._call_tool_direct(
+                position_tone_map[pos_str] = beat_tone
+
+            # Get unique tone codes and batch query them
+            unique_tone_codes = list(set(position_tone_map.values()))
+            if unique_tone_codes:
+                # BATCH API call - query all tone codes at once
+                batch_candidates_raw = await self._call_tool_direct(
                     server_name="jyutping",
                     tool_name="find_words_by_tone_code",
-                    args={"code": beat_tone},
+                    args={"code": unique_tone_codes},  # Batch call!
                     parse_json=True,
                 )
-                if isinstance(candidates_raw, list):
-                    strong_beat_candidates[str(pos)] = candidates_raw[:10]
+
+                # Parse batch results: returns list of lists [[words_for_code1], [words_for_code2], ...]
+                batch_candidates: list[list[str]] = (
+                    batch_candidates_raw if isinstance(batch_candidates_raw, list) and
+                    all(isinstance(item, list) for item in batch_candidates_raw)
+                    else []
+                )
+
+                # Build tone_code -> candidates map
+                tone_to_candidates: dict[str, list[str]] = {}
+                for i, tone_code in enumerate(unique_tone_codes):
+                    if i < len(batch_candidates):
+                        tone_to_candidates[tone_code] = batch_candidates[i][:15]  # Keep top 15 per tone
+
+                # Build position -> candidates map
+                strong_beat_candidates: dict[str, list[str]] = {}
+                for pos_str, tone_code in position_tone_map.items():
+                    strong_beat_candidates[pos_str] = tone_to_candidates.get(tone_code, [])
+            else:
+                strong_beat_candidates = {}
+
+            # ----------------------------------------------------------
+            # Step 1d: Pre-query theme-related common words
+            # ----------------------------------------------------------
+            logger.info("Step 1d: 查询主题相关常用词...")
+
+            # Extract theme keywords from reference text
+            theme_tone_codes = await self._extract_theme_tone_codes(reference_text)
+
+            theme_candidates: dict[str, list[str]] = {}
+            if theme_tone_codes:
+                # Batch query theme-related tone codes
+                theme_candidates_raw = await self._call_tool_direct(
+                    server_name="jyutping",
+                    tool_name="find_words_by_tone_code",
+                    args={"code": theme_tone_codes},
+                    parse_json=True,
+                )
+
+                theme_candidates_list: list[list[str]] = (
+                    theme_candidates_raw if isinstance(theme_candidates_raw, list) and
+                    all(isinstance(item, list) for item in theme_candidates_raw)
+                    else []
+                )
+
+                # Map tone code -> candidates
+                for i, tone_code in enumerate(theme_tone_codes):
+                    if i < len(theme_candidates_list):
+                        theme_candidates[tone_code] = theme_candidates_list[i][:20]
+
+                logger.info("主题相关声调码：%s → 候选词 %d 个", theme_tone_codes, sum(len(c) for c in theme_candidates.values()))
 
             jyutping_map: dict = {
                 "reference_text":             reference_text,
@@ -397,6 +473,7 @@ class AgentOrchestrator:
                 "rhyme_positions":            rhyme_positions,
                 "strong_beat_positions":      strong_beats,
                 "strong_beat_candidates":     strong_beat_candidates,
+                "theme_candidates":           theme_candidates,  # Theme-related words
                 "target_syllable_count":      syllable_count,
             }
             result.jyutping_map = jyutping_map
@@ -834,6 +911,13 @@ class AgentOrchestrator:
             for pos, words in list(sbc.items())[:6]
         ) or "  （无预查询候选）"
 
+        # Build theme candidate summary
+        theme_candidates = jyutping_map.get("theme_candidates", {})
+        theme_summary = "\n".join(
+            f"  声调{tone}: {', '.join(words[:8])}"
+            for tone, words in list(theme_candidates.items())[:6]
+        ) or "  （无主题候选词）"
+
         melody_tone_seq_str = (
             " ".join(str(t) for t in melody_tone_sequence[:syllable_count]) or "（未知）"
         )
@@ -863,6 +947,7 @@ class AgentOrchestrator:
             selected_jp=selected_jp or "（未查询到）",
             reference_tone_seq_str=reference_tone_seq_str,
             sbc_summary=sbc_summary,
+            theme_summary=theme_summary,
         )
 
         if attempt > 0 and revision_instructions:
@@ -952,6 +1037,8 @@ class AgentOrchestrator:
                 api_key=cfg["api_key"],
                 temperature=cfg["temperature"],
                 max_tokens=cfg.get("max_tokens", 8192),
+                # Disable reasoning/thinking to reduce latency
+                extra_body={"thinking": False},
             )
         else:
             # Default: Ollama
@@ -967,11 +1054,72 @@ class AgentOrchestrator:
                 base_url=cfg["base_url"],
                 temperature=cfg["temperature"],
                 num_ctx=cfg.get("num_ctx", 8192),
+                # Disable reasoning/thinking to reduce latency
+                num_predict=cfg.get("max_tokens", 8192),
             )
 
     # ------------------------------------------------------------------
-    # Internal: memory builder
+    # Internal: theme keyword extractor
     # ------------------------------------------------------------------
+
+    async def _extract_theme_tone_codes(self, reference_text: str) -> list[str]:
+        """
+        从参考文本中提取主题相关的声调码。
+
+        策略：
+        1. 提取参考文本中的 2-4 字词语作为关键词
+        2. 查询每个关键词的声调码
+        3. 返回去重后的声调码列表
+
+        Parameters
+        ----------
+        reference_text : str
+            参考文本/主题描述
+
+        Returns
+        -------
+        list[str]
+            主题相关的声调码列表（去重）
+        """
+        import re
+
+        # 简单策略：提取 2-4 字词语作为关键词
+        chinese_words = re.findall(r'[\u4e00-\u9fff]{2,4}', reference_text)
+
+        # 去重并限制数量
+        unique_words = list(set(chinese_words))[:10]
+
+        if not unique_words:
+            return []
+
+        logger.debug("提取主题关键词：%s", unique_words)
+
+        # 并行查询每个关键词的声调码
+        tone_code_tasks = [
+            self._call_tool_direct(
+                server_name="jyutping",
+                tool_name="get_tone_code",
+                args={"text": word},
+                parse_json=True,
+            )
+            for word in unique_words
+        ]
+
+        tone_code_results = await asyncio.gather(*tone_code_tasks, return_exceptions=True)
+
+        # 收集所有声调码
+        all_tone_codes: set[str] = set()
+        for result in tone_code_results:
+            if isinstance(result, list):
+                all_tone_codes.update(str(code) for code in result if code)
+
+        # 限制声调码数量（避免过多 API 调用）
+        unique_tone_codes = list(all_tone_codes)[:8]
+
+        if unique_tone_codes:
+            logger.info("主题关键词声调码：%s", unique_tone_codes)
+
+        return unique_tone_codes
 
     @staticmethod
     def _build_memory(session_id: str | None = None) -> ShortTermMemory:

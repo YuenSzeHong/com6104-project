@@ -1,26 +1,16 @@
 from __future__ import annotations
 
-import importlib.util
 import sys
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator, Callable
 
 import pytest
+from mcp.client.session import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = REPO_ROOT / "src"
-
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-
-def load_module(module_name: str, file_path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load module: {file_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(scope="session")
@@ -33,25 +23,46 @@ def doraemon_midi(repo_root: Path) -> Path:
     return repo_root / "test" / "midi" / "ドラえもんのうた.mid"
 
 
-@pytest.fixture(scope="session")
-def midi_analyzer_module(repo_root: Path):
-    return load_module(
-        "test_midi_analyzer_server",
-        repo_root / "mcp-servers" / "midi-analyzer" / "server.py",
-    )
+def _session_factory(
+    server_script: Path,
+) -> Callable[[], AbstractAsyncContextManager[ClientSession]]:
+    """Return an async context manager that creates an MCP client session."""
+
+    @asynccontextmanager
+    async def _make_session() -> AsyncIterator[ClientSession]:
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=[str(server_script)],
+        )
+        async with stdio_client(server_params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                yield session
+
+    return _make_session
 
 
-@pytest.fixture(scope="session")
-def melody_mapper_module(repo_root: Path):
-    return load_module(
-        "test_melody_mapper_server",
-        repo_root / "mcp-servers" / "melody-mapper" / "server.py",
-    )
+@pytest.fixture
+def mcp_session_jyutping():
+    """Fixture: factory for MCP sessions connected to jyutping server.
+
+    Usage:
+        async with mcp_session_jyutping() as session:
+            result = await session.call_tool(...)
+    """
+    server_script = REPO_ROOT / "mcp-servers" / "jyutping" / "server.py"
+    return _session_factory(server_script)
 
 
-@pytest.fixture(scope="session")
-def jyutping_module(repo_root: Path):
-    return load_module(
-        "test_jyutping_server",
-        repo_root / "mcp-servers" / "jyutping" / "server.py",
-    )
+@pytest.fixture
+def mcp_session_melody_mapper():
+    """Fixture: factory for MCP sessions connected to melody-mapper server."""
+    server_script = REPO_ROOT / "mcp-servers" / "melody-mapper" / "server.py"
+    return _session_factory(server_script)
+
+
+@pytest.fixture
+def mcp_session_midi_analyzer():
+    """Fixture: factory for MCP sessions connected to midi-analyzer server."""
+    server_script = REPO_ROOT / "mcp-servers" / "midi-analyzer" / "server.py"
+    return _session_factory(server_script)

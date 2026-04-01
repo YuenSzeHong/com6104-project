@@ -102,16 +102,19 @@ _JP_SYLLABLE_RE = re.compile(r"[a-z]+[1-6]", re.IGNORECASE)
 _NUMERIC_RE = re.compile(r"^\d+$")
 
 
-async def _call_api(nums: str) -> list[str]:
+async def _call_api(nums: str | list[str]) -> list[Any]:
     """
-    POST {"nums": nums} to https://www.0243.hk/api/cls/.
+    Wrapper that supports single or batch queries to the 0243.hk API.
 
-    Returns the JSON array of candidate strings, or [] on error.
-    Retries up to _MAX_RETRIES times on transient failures.
+    Returns a flat list of strings for single queries, or a list of lists for batch
+    queries. The static return type is relaxed to `list[Any]` to simplify downstream
+    typing and avoid false-positive static-type errors when callers receive either
+    a `list[str]` or `list[list[str]]`.
     """
-    payload = {"nums": nums}
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async def _single_call(query: str, client: httpx.AsyncClient) -> list[str]:
+        payload = {"nums": query}
+        last_exc = None
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 resp = await client.post(
@@ -133,26 +136,49 @@ async def _call_api(nums: str) -> list[str]:
                 return []
 
             except httpx.HTTPStatusError as exc:
+                last_exc = exc
                 logger.warning(
                     "0243.hk HTTP 错误（第 %d/%d 次）: %s",
-                    attempt, _MAX_RETRIES, exc.response.status_code,
+                    attempt, _MAX_RETRIES, getattr(exc.response, "status_code", "?")
                 )
             except httpx.RequestError as exc:
+                last_exc = exc
                 logger.warning(
                     "0243.hk 请求错误（第 %d/%d 次）: %s",
                     attempt, _MAX_RETRIES, exc,
                 )
             except json.JSONDecodeError as exc:
+                last_exc = exc
                 logger.warning(
                     "0243.hk JSON 解析失败（第 %d/%d 次）: %s",
                     attempt, _MAX_RETRIES, exc,
                 )
-                return []
 
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_DELAY * attempt)
 
-    return []
+        # All retries exhausted, raise the last exception
+        if last_exc is not None:
+            raise last_exc
+        return []
+
+    # Batch path
+    if isinstance(nums, (list, tuple)):
+        if not nums:
+            return []
+        semaphore = asyncio.Semaphore(8)
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            async def _fetch(q: str) -> list[str]:
+                async with semaphore:
+                    return await _single_call(q, client)
+
+            tasks = [_fetch(str(q)) for q in nums]
+            results = await asyncio.gather(*tasks)
+        return results
+
+    # Single path
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        return await _single_call(str(nums), client)
 
 
 # ---------------------------------------------------------------------------
@@ -391,40 +417,59 @@ async def get_tone_pattern(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 5: Numeric tone code → Chinese words
+# Tool 5: Numeric tone code → Chinese words (single or batch)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def find_words_by_tone_code(code: str | int) -> str:
+async def find_words_by_tone_code(code: str | int | list[Any]) -> str:
     """
     根据数字声调码查找具有该声调模式的中文词语。
 
-    调用 0243.hk API（Mode 1）。0243.hk 是一个粤语输入法引擎，
-    数字码代表粤语声调序列——输入 "43" 即可找到所有
-    第一个音节为声调4、第二个音节为声调3的双音节词语。
-
-    这是歌词创作的核心工具：当旋律要求某位置的字必须具有特定声调模式时，
-    用此工具快速找到符合要求的候选词语。
+    支持单个 code（str 或 int）或批量输入（list/tuple）。
+    - 单个输入返回 JSON 数组字符串：["羅曼蒂克", ...]
+    - 批量输入返回 JSON 数组的数组：[ ["羅曼蒂克", ...], ["年事已高", ...], ... ]
 
     参数
     ----
-    code : str
-        数字字符串，每位数字代表一个音节的声调。
-        例如：
-        - "1"  → 所有声调1（高平）的单音节字
-        - "43" → 声调4后接声调3的双音节词
-        - "0243" → 四音节词，声调依次为 0-2-4-3
+    code : str | int | list[str]
+        数字字符串或数字，或字符串列表。
 
     返回
     ----
     str
-        JSON 数组字符串，包含具有该声调码的中文词语。
-        示例（code="0243"）：["羅曼蒂克", "權力鬥爭", "年事已高", ...]
-        若无结果则返回 "[]"。
+        JSON 字符串（数组或数组的数组）。
     """
     if code is None:
         return "[]"
 
+    # Batch handling
+    if isinstance(code, (list, tuple)):
+        if not code:
+            return "[]"
+        # Normalize to string tokens
+        normalized = [str(c).strip() for c in code]
+
+        # Validate numeric tokens
+        for token in normalized:
+            if not token:
+                return "[]"
+            if not _NUMERIC_RE.match(token):
+                logger.warning("find_words_by_tone_code (batch): 非数字输入 %r", token)
+                return json.dumps({"error": f"输入必须为纯数字字符串，收到：{token!r}"})
+
+        logger.info("find_words_by_tone_code: batch codes=%r", normalized)
+        candidates_list = await _call_api(normalized)  # Expected: list[list[str]]
+
+        results: list[list[str]] = []
+        for candidates in candidates_list:
+            # Filter Chinese results for each sublist
+            chinese_words = [c for c in candidates if _is_chinese(c)]
+            results.append(chinese_words if chinese_words else candidates)
+
+        logger.info("find_words_by_tone_code: batch → %d items", len(results))
+        return json.dumps(results, ensure_ascii=False)
+
+    # Single handling
     code = str(code).strip()
     if not code:
         return "[]"
@@ -448,61 +493,92 @@ async def find_words_by_tone_code(code: str | int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 6: Tone-constrained continuation (mixed mode)
+# Tool 6: Tone-constrained continuation (mixed mode; single or batch)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def find_tone_continuation(chinese_prefix: str, tone_digits: str | int) -> str:
+async def find_tone_continuation(chinese_prefix: str | list[Any], tone_digits: str | int | list[Any]) -> str:
     """
     在已有粤语文本后面，查找具有指定声调模式的续接词语。
 
-    调用 0243.hk API（Mode 3：中文前缀 + 数字后缀的混合查询）。
-    这是歌词创作最强大的工具：在已填入的歌词之后，
-    找出声调模式符合旋律要求的候选汉字/词语。
-
-    工作原理
-    --------
-    0243.hk 的混合查询模式（如 "我要43"）会将中文前缀作为上下文，
-    返回在该前缀之后、声调序列与数字后缀匹配的词语候选。
-    这让歌词创作代理能够做到"上下文感知的声调约束补全"。
+    支持单个 prefix+digits，也支持批量（两者为 list/tuple）。
+    - 单个输入返回 JSON 数组字符串：["那麼", "有多", ...]
+    - 批量输入返回 JSON 数组的数组：[ ["那麼","有多"], ["這麼","更多"], ... ]
 
     参数
     ----
-    chinese_prefix : str
-        已确定的中文歌词文本，作为查询前缀。
-        例如："青山" 或 "縱然" 或 "我要"
-
-    tone_digits : str
-        续接词语所需的声调数字序列（纯数字字符串）。
-        例如：
-        - "1"  → 下一个字为声调1（高平）
-        - "13" → 接下来两个字声调依次为1、3
-        - "141"→ 接下来三个字声调依次为1、4、1
+    chinese_prefix : str | list[str]
+        已确定的中文歌词文本，或者文本列表。
+    tone_digits : str | int | list[int]
+        续接词语所需的声调数字序列（纯数字字符串），或者对应的列表。
 
     返回
     ----
     str
-        JSON 数组字符串，包含可续接在前缀之后、且声调符合要求的中文词语。
-        示例（prefix="我要", tone_digits="43"）：
-        ["那麼", "有多", "這麼", "更多", "唱歌", ...]
-        若无结果则返回 "[]"。
-
-    使用示例
-    --------
-    歌词已写到 "青山依"，旋律下一个音节要求声调6：
-        find_tone_continuation("青山依", "6")
-        → 找到声调6的字填入第4个位置
-
-    已写 "縱然"，接下来两音节需要声调1、4：
-        find_tone_continuation("縱然", "14")
-        → 找到适合续接的声调1+4双音节词
+        JSON 字符串（数组或数组的数组）。
     """
-    if not chinese_prefix or tone_digits is None:
+    # Normalize None/empty guard
+    if (chinese_prefix is None) or (tone_digits is None):
         return "[]"
 
-    chinese_prefix = chinese_prefix.strip()
-    tone_digits    = str(tone_digits).strip()
-    if not tone_digits:
+    # Batch / mixed scenarios
+    # Case A: both lists -> pairwise combination
+    if isinstance(chinese_prefix, (list, tuple)) or isinstance(tone_digits, (list, tuple)):
+        # Normalize prefixes to list
+        if isinstance(chinese_prefix, (list, tuple)):
+            prefixes = [str(p).strip() for p in chinese_prefix]
+        else:
+            prefixes = [str(chinese_prefix).strip()]
+
+        # Normalize tone digits to list of strings
+        if isinstance(tone_digits, (list, tuple)):
+            tones = [str(t).strip() for t in tone_digits]
+        else:
+            tones = [str(tone_digits).strip()]
+
+        # Determine pairing strategy:
+        # - If lengths equal -> zip pairwise
+        # - If one is length 1 -> broadcast
+        # - Else if both >1 and lengths unequal -> error
+        if len(prefixes) == len(tones):
+            pairs = list(zip(prefixes, tones))
+        elif len(prefixes) == 1 and len(tones) >= 1:
+            pairs = [(prefixes[0], t) for t in tones]
+        elif len(tones) == 1 and len(prefixes) >= 1:
+            pairs = [(p, tones[0]) for p in prefixes]
+        else:
+            logger.warning("find_tone_continuation: prefixes and tones length mismatch")
+            return json.dumps({"error": "prefix list and tone_digits list must have equal length or one must be length 1"})
+
+        # Validate and build queries
+        queries: list[str] = []
+        for p, t in pairs:
+            if not p:
+                queries.append(t)  # fall back to just digits although odd; keeps behavior consistent
+                continue
+            if not t:
+                queries.append(p)
+                continue
+            if not _NUMERIC_RE.match(t):
+                logger.warning("find_tone_continuation (batch): 非数字 tone_digits %r", t)
+                return json.dumps({"error": f"tone_digits 必须为纯数字字符串，收到：{t!r}"})
+            queries.append(f"{p}{t}")
+
+        logger.info("find_tone_continuation: batch queries=%r", queries)
+        candidates_list = await _call_api(queries)  # expected: list[list[str]]
+
+        results: list[list[str]] = []
+        for candidates in candidates_list:
+            chinese_results = [c for c in candidates if _is_chinese(c)]
+            results.append(chinese_results if chinese_results else candidates)
+
+        logger.info("find_tone_continuation: batch → %d items", len(results))
+        return json.dumps(results, ensure_ascii=False)
+
+    # Single path (both single scalars)
+    chinese_prefix = str(chinese_prefix).strip()
+    tone_digits = str(tone_digits).strip()
+    if not chinese_prefix or not tone_digits:
         return "[]"
 
     if not _NUMERIC_RE.match(tone_digits):

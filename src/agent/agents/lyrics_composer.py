@@ -41,6 +41,20 @@ from agent.base_agent import BaseAgent, AgentResult
 from agent.config import PROMPTS_DIR
 from agent.registry import AGENT_REGISTRY
 
+# Lazy import WordSelectorAgent to avoid circular dependency
+_word_selector_cls = None
+
+
+def _get_word_selector_class():
+    """Lazy import of WordSelectorAgent to avoid circular dependency."""
+    global _word_selector_cls
+    if _word_selector_cls is None:
+        from agent.agents.word_selector import WordSelectorAgent
+
+        _word_selector_cls = WordSelectorAgent
+    return _word_selector_cls
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,6 +135,15 @@ class LyricsComposerAgent(BaseAgent):
     ``[REVISION ATTEMPT N]``.
     Reads the previous draft and validator feedback from context and produces
     an improved version that addresses the specific corrections requested.
+
+    Word Selection Integration
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    When 0243.hk API returns too many candidates (>10), the agent automatically
+    invokes WordSelectorAgent to select the best word based on:
+    - Context (surrounding lyrics)
+    - Semantic field / theme
+    - Tone matching with melody
+    - Rhyme consistency at phrase endings
     """
 
     # ------------------------------------------------------------------
@@ -195,6 +218,20 @@ class LyricsComposerAgent(BaseAgent):
             tone_sequence=melody_tone_sequence,
         )
         structured["attempt"] = attempt + 1
+
+        # ----------------------------------------------------------------
+        # Word selection refinement: invoke WordSelectorAgent for positions
+        # where 0243.hk returned too many candidates
+        # ----------------------------------------------------------------
+        candidate_map: dict[int, list[str]] = jmap.get("candidate_words_map", {})
+        if candidate_map:
+            structured = await self._refine_word_selection(
+                structured=structured,
+                candidate_map=candidate_map,
+                melody_tone_sequence=melody_tone_sequence,
+                rhyme_positions=rhyme_positions,
+                reference_text=reference_text,
+            )
 
         # ----------------------------------------------------------------
         # Quality self-check before handing off to validator
@@ -532,7 +569,7 @@ class LyricsComposerAgent(BaseAgent):
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
-                    return text[start : i + 1]
+                    return text[start: i + 1]
 
         return ""
 
@@ -576,3 +613,173 @@ class LyricsComposerAgent(BaseAgent):
                 "syllable_count": syl_count,
             })
         return result
+
+    # ------------------------------------------------------------------
+    # Word selection refinement
+    # ------------------------------------------------------------------
+
+    async def _refine_word_selection(
+        self,
+        structured: dict[str, Any],
+        candidate_map: dict[int, list[str]],
+        melody_tone_sequence: list[int],
+        rhyme_positions: list[int],
+        reference_text: str,
+    ) -> dict[str, Any]:
+        """
+        Refine word selection using WordSelectorAgent for positions with many candidates.
+
+        When 0243.hk API returns too many candidates (>10) for a position,
+        invoke WordSelectorAgent to select the best word based on context.
+
+        Parameters
+        ----------
+        structured : dict
+            The parsed lyrics structure from LLM
+        candidate_map : dict[int, list[str]]
+            Map of position -> candidate words from 0243.hk API
+        melody_tone_sequence : list[int]
+            The melody's tone sequence (0243 system)
+        rhyme_positions : list[int]
+            Positions that should rhyme (phrase endings)
+        reference_text : str
+            Reference text / theme for semantic context
+
+        Returns
+        -------
+        dict
+            Updated structured lyrics with refined word selections
+        """
+        WordSelectorAgent = _get_word_selector_class()
+
+        lyrics_text = structured.get("lyrics", "")
+
+        # Extract current lyrics as a list of characters/words for easy modification
+        lyrics_chars = list(lyrics_text.replace("\n", ""))
+
+        # Threshold for invoking word selector
+        CANDIDATE_THRESHOLD = 10
+
+        self._log.info(
+            "Refining word selection | positions_with_many_candidates=%d",
+            sum(
+                1
+                for cands in candidate_map.values()
+                if len(cands) > CANDIDATE_THRESHOLD
+            ),
+        )
+
+        # Process positions with many candidates
+        for position, candidates in sorted(candidate_map.items()):
+            if len(candidates) <= CANDIDATE_THRESHOLD:
+                continue  # Skip positions with few candidates
+
+            if position >= len(lyrics_chars):
+                continue  # Position out of bounds
+
+            # Build selection context
+            context = self._build_word_selection_context(
+                position=position,
+                lyrics_text=lyrics_text,
+                melody_tone=melody_tone_sequence[position]
+                if position < len(melody_tone_sequence)
+                else None,
+                is_rhyme_position=position in rhyme_positions,
+                reference_text=reference_text,
+            )
+
+            # Invoke WordSelectorAgent
+            selector = WordSelectorAgent(
+                config=self.config,
+                llm=self.llm,
+                memory=self.memory,
+                tools=[],  # Word selector doesn't need tools
+            )
+
+            result = await selector.run(
+                task=f"为歌词位置 {position} 选择最合适的词语",
+                candidates=candidates,
+                context=context,
+                count=1,
+            )
+
+            selected_word = result.output
+            if selected_word and len(selected_word) == 1:
+                # Replace the character at this position
+                lyrics_chars[position] = selected_word
+                self._log.info(
+                    "Position %d: selected '%s' from %d candidates | reason=%s",
+                    position,
+                    selected_word,
+                    len(candidates),
+                    result.metadata.get("selection_reason", "?")[:60],
+                )
+
+        # Reconstruct lyrics with selected words
+        "".join(lyrics_chars)
+
+        # Re-split into lines preserving original line breaks
+        original_lines = lyrics_text.split("\n")
+        char_idx = 0
+        new_lines_text = []
+        for orig_line in original_lines:
+            line_len = len(orig_line.strip())
+            if line_len > 0:
+                new_lines_text.append(
+                    "".join(lyrics_chars[char_idx : char_idx + line_len])
+                )
+                char_idx += line_len
+            else:
+                new_lines_text.append("")
+
+        structured["lyrics"] = "\n".join(new_lines_text)
+        structured["lines"] = self._split_lyrics_to_lines(
+            structured["lyrics"],
+            structured.get("jyutping", ""),
+        )
+
+        return structured
+
+    def _build_word_selection_context(
+        self,
+        position: int,
+        lyrics_text: str,
+        melody_tone: int | None,
+        is_rhyme_position: bool,
+        reference_text: str,
+    ) -> dict[str, Any]:
+        """
+        Build context for word selection at a specific position.
+
+        Returns a dict with:
+        - surrounding_before: preceding characters/words
+        - surrounding_after: following characters/words
+        - semantic_field: inferred from reference text
+        - theme: overall theme
+        - rhyme_final: if rhyme position, the expected rhyme final
+        """
+        # Extract surrounding context (±5 characters)
+        window = 5
+        before_start = max(0, position - window)
+        after_end = min(len(lyrics_text), position + window + 1)
+
+        surrounding_before = lyrics_text[before_start:position] if position > 0 else ""
+        surrounding_after = (
+            lyrics_text[position + 1 : after_end]
+            if position < len(lyrics_text) - 1
+            else ""
+        )
+
+        context: dict[str, Any] = {
+            "position": f"第 {position + 1} 字",
+            "surrounding_before": surrounding_before,
+            "surrounding_after": surrounding_after,
+            "melody_tone": str(melody_tone) if melody_tone is not None else None,
+            "semantic_field": reference_text[:50] if reference_text else "",
+            "theme": "歌词创作",
+        }
+
+        if is_rhyme_position:
+            context["rhyme_requirement"] = "需与押韵位置协调"
+
+        return context

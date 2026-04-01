@@ -63,6 +63,7 @@ Testing with MCP Inspector
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sys
@@ -96,11 +97,14 @@ _TIMEOUT = 15.0
 _MAX_RETRIES = 3
 
 
-async def _call_0243_api(nums: str) -> list[str]:
-    """Call 0243.hk API with a tone code, return Chinese word candidates."""
-    payload = {"nums": nums}
+async def _call_0243_api(nums: str | list[str]) -> list[str] | list[list[str]]:
+    """Call 0243.hk API with a tone code or list of codes, return candidates.
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    If nums is a string, returns list[str]. If nums is a list, returns list[list[str]].
+    """
+
+    async def _single(query: str, client: httpx.AsyncClient) -> list[str]:
+        payload = {"nums": query}
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 resp = await client.post(
@@ -125,10 +129,25 @@ async def _call_0243_api(nums: str) -> list[str]:
                     attempt, _MAX_RETRIES, exc
                 )
                 if attempt < _MAX_RETRIES:
-                    import asyncio
                     await asyncio.sleep(1.0 * attempt)
+        return []
 
-    return []
+    if isinstance(nums, (list, tuple)):
+        if not nums:
+            return []
+        semaphore = asyncio.Semaphore(8)
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+
+            async def _fetch(q: str) -> list[str]:
+                async with semaphore:
+                    return await _single(q, client)
+
+            tasks = [_fetch(str(q)) for q in nums]
+            results = await asyncio.gather(*tasks)
+        return results
+
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        return await _single(str(nums), client)
 
 # ---------------------------------------------------------------------------
 # 0243 Tone System Constants

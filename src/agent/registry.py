@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, Callable, Type
 
 if TYPE_CHECKING:
     from .base_agent import BaseAgent
-    from .config import AgentConfig, MCPServerConfig
+    from .config import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 

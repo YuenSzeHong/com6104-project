@@ -27,7 +27,6 @@ Run for manual testing (MCP Inspector):
 from __future__ import annotations
 
 import json
-import math
 import statistics
 from collections import defaultdict
 from pathlib import Path

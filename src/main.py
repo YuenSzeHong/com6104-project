@@ -35,6 +35,10 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent.orchestrator import PipelineResult
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +244,9 @@ def _print_banner() -> None:
     print(banner, file=sys.stderr)
 
 
-def _print_result(result: "PipelineResult", as_json: bool, output_file: str | None) -> None:  # type: ignore[name-defined]
+def _print_result(
+    result: "PipelineResult", as_json: bool, output_file: str | None
+) -> None:
     """Print or write the pipeline result."""
     if as_json:
         output_text = json.dumps(
@@ -355,11 +361,39 @@ async def run_pipeline(
 
     _print_result(result, as_json=as_json, output_file=output_file)
 
+    # 写入歌词文件并输出
+    if result.lyrics:
+        _write_lyrics_file(midi_path, result.lyrics)
+        # 直接输出歌词到 stderr，确保能看到
+        if not as_json:
+            print("\n" + "=" * 60, file=sys.stderr)
+            print(result.lyrics, file=sys.stderr)
+            print("=" * 60 + "\n", file=sys.stderr)
+
     if result.error:
         logger.error("Pipeline finished with error: %s", result.error)
         return 1
 
     return 0
+
+
+def _write_lyrics_file(midi_path: str, lyrics: str) -> None:
+    """
+    将生成的歌词写入文件。
+
+    文件名格式：<midi 文件名>.lyrics.txt
+    保存在 MIDI 文件同一目录下。
+    """
+    from pathlib import Path
+
+    midi_file = Path(midi_path)
+    lyrics_file = midi_file.with_suffix(".lyrics.txt")
+
+    try:
+        lyrics_file.write_text(lyrics, encoding="utf-8")
+        logger.info("歌词已写入：%s", lyrics_file)
+    except Exception as exc:
+        logger.warning("无法写入歌词文件：%s", exc)
 
 
 # ---------------------------------------------------------------------------

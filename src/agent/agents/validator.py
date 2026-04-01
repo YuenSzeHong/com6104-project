@@ -48,7 +48,6 @@ import re
 from typing import Any
 
 from agent.base_agent import BaseAgent, AgentResult
-from agent.config import AgentConfig
 from agent.registry import AGENT_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -680,8 +679,8 @@ Do not include any other text.
             f"**Composite Score:** {composite_score:.3f}  [{bar}]",
             "",
             "### Dimension Scores",
-            f"| Dimension        | Score | Weight |",
-            f"|------------------|-------|--------|",
+            "| Dimension        | Score | Weight |",
+            "|------------------|-------|--------|",
             f"| Syllable Count   | {dim_syllable:.3f} | 30%    |",
             f"| Melody 0243 Fit  | {dim_tonal:.3f} | 35%    |",
             f"| Rhyme Consistency| {dim_rhyme:.3f} | 20%    |",

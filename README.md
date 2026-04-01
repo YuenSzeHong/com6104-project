@@ -6,7 +6,7 @@
 
 ---
 
-### Project Overview
+## Project Overview
 
 This is a **Cantonese lyric adaptation and songwriting system** built on a multi-agent AI architecture. Its primary use case is to turn a foreign-language song or an existing lyric into a singable Cantonese version. If no original lyric is provided, it can also write from a theme or scenario. Users provide a MIDI melody file together with a source lyric or theme text; the system analyses the melody structure and produces Cantonese lyrics that fit pronunciation, lean 0243 melody constraints, and rhyme.
 

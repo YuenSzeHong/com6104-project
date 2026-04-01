@@ -28,9 +28,6 @@ uv.lock
 Thumbs.db
 
 # Project specific
-*.mid
-*.abc
-*.txt
 !README.md
 !README.zh-CN.md
 !pyproject.toml
