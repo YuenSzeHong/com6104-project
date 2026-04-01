@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.base_agent import BaseAgent, AgentResult
-from agent.config import PROMPTS_DIR
+from agent.config import PROMPTS_AGENTS_DIR
 from agent.registry import AGENT_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -274,7 +274,7 @@ class WordSelectorAgent(BaseAgent):
     @staticmethod
     def _render_prompt_template(template_name: str, **kwargs: Any) -> str:
         """渲染提示模板。"""
-        template_path: Path = PROMPTS_DIR / template_name
+        template_path: Path = PROMPTS_AGENTS_DIR / template_name
         if template_path.exists():
             return template_path.read_text(encoding="utf-8").format(**kwargs).strip()
 

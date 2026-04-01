@@ -205,6 +205,8 @@ class ValidatorAgent(BaseAgent):
             len(expected_tone_sequence),
         )
 
+        self._memory.add_user_message(task)
+
         # ----------------------------------------------------------------
         # 1. Obtain actual Jyutping for the draft lyrics via MCP tools
         # ----------------------------------------------------------------

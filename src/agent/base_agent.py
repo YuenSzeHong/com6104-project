@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 # Lazy import for current LangChain agent API
@@ -291,6 +291,10 @@ class BaseAgent(ABC):
         Run a LangChain agent loop: the LLM decides which tools to call,
         calls them (via MCP), and produces a final answer.
 
+        After execution, extracts all intermediate messages (tool calls,
+        tool results, final response) and records them to shared memory
+        so the GUI can display the full creative process.
+
         Parameters
         ----------
         task          : The task description sent as the human turn.
@@ -325,8 +329,86 @@ class BaseAgent(ABC):
         messages = list(self._memory.get_messages(include_system=False))
         messages.append(HumanMessage(content=full_task))
 
+        # Record a marker to memory so GUI shows the agent is working
+        self._memory.add_ai_message(
+            f"🔄 正在处理任务... (使用工具: {', '.join(self.tool_names[:6])}{'...' if len(self.tool_names) > 6 else ''})",
+            metadata={"agent": self.name, "event": "processing"},
+        )
+
         result = await self._executor.ainvoke({"messages": messages})
-        return self._extract_agent_output(result)
+
+        # Extract ALL messages from the agent execution and record to memory
+        # This includes tool calls, tool results, and the final AI response
+        self._record_agent_messages(result)
+
+        output_str = self._extract_agent_output(result)
+        self._log.debug("_invoke_with_tools | extracted_output=%r", output_str[:200])
+
+        return output_str
+
+    def _record_agent_messages(self, result: Any) -> None:
+        """
+        Extract all messages from the agent execution result and record
+        them to shared memory for GUI visibility.
+
+        This captures the full creative process:
+        - LLM tool calls (with arguments)
+        - Tool execution results
+        - Final AI text response
+        """
+        if not isinstance(result, dict):
+            return
+
+        result_messages = result.get("messages", [])
+        if not isinstance(result_messages, list):
+            return
+
+        # Build a set of content hashes from existing memory to avoid duplicates
+        existing_content_hashes = set()
+        for turn in self._memory._turns:
+            for msg in turn.messages:
+                content = getattr(msg, "content", "")
+                if content:
+                    existing_content_hashes.add(hash(str(content)[:200]))
+
+        # Process each message from the agent execution
+        for msg in result_messages:
+            # Skip HumanMessage inputs - those are already added by the caller
+            if isinstance(msg, HumanMessage):
+                continue
+
+            content = getattr(msg, "content", "")
+            content_hash = hash(str(content)[:200]) if content else None
+
+            # Skip duplicates
+            if content_hash and content_hash in existing_content_hashes:
+                continue
+
+            # Record this message to memory
+            if isinstance(msg, AIMessage):
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    # This is a tool call message
+                    for tc in msg.tool_calls:
+                        self._log.info(
+                            "📝 [GUI] Agent → Tool: %s(%s)",
+                            tc.get("name", "?"),
+                            str(tc.get("args", {}))[:100],
+                        )
+                elif content:
+                    # This is a text response
+                    self._log.info("📝 [GUI] Agent response: %r", content[:100])
+            elif isinstance(msg, ToolMessage):
+                tool_name = getattr(msg, "name", "unknown")
+                self._log.info(
+                    "📝 [GUI] Tool result (%s): %r",
+                    tool_name,
+                    str(content)[:100],
+                )
+
+            # Add to memory
+            self._memory._append_turn([msg], metadata={"agent": self.name})
+            if content_hash:
+                existing_content_hashes.add(content_hash)
 
     def _build_executor(self) -> Any:
         """
@@ -388,13 +470,34 @@ class BaseAgent(ABC):
 
             messages = result.get("messages")
             if isinstance(messages, list) and messages:
+                # Walk backwards to find the last AIMessage with actual text content
+                for msg in reversed(messages):
+                    if not hasattr(msg, "content"):
+                        continue
+                    content = msg.content
+                    if isinstance(content, list):
+                        parts: list[str] = []
+                        for item in content:
+                            if isinstance(item, str):
+                                parts.append(item)
+                            elif isinstance(item, dict):
+                                text = item.get("text")
+                                if text:
+                                    parts.append(str(text))
+                        joined = "\n".join(p for p in parts if p).strip()
+                        if joined:
+                            return joined
+                    elif isinstance(content, str) and content.strip():
+                        return content.strip()
+
+                # Fallback: return whatever the last message had
                 last = messages[-1]
-                content = getattr(last, "content", "")
-                if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    parts: list[str] = []
-                    for item in content:
+                last_content = getattr(last, "content", "")
+                if isinstance(last_content, str):
+                    return last_content
+                if isinstance(last_content, list):
+                    parts = []
+                    for item in last_content:
                         if isinstance(item, str):
                             parts.append(item)
                         elif isinstance(item, dict):
@@ -402,7 +505,7 @@ class BaseAgent(ABC):
                             if text:
                                 parts.append(str(text))
                     return "\n".join(p for p in parts if p).strip()
-                return str(content)
+                return str(last_content)
 
         return str(result or "")
 
@@ -456,8 +559,9 @@ class BaseAgent(ABC):
             return content
 
         # 按约定路径自动发现（prompts/<name>.md）
-        from .config import PROMPTS_DIR
-        convention_path = PROMPTS_DIR / f"{self.name}.md"
+        from .config import PROMPTS_AGENTS_DIR
+
+        convention_path = PROMPTS_AGENTS_DIR / f"{self.name}.md"
         if convention_path.exists():
             content = convention_path.read_text(encoding="utf-8").strip()
             self._log.debug("已按约定路径加载提示文件：%s", convention_path)

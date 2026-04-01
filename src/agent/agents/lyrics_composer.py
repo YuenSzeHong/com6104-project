@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.base_agent import BaseAgent, AgentResult
-from agent.config import PROMPTS_DIR
+from agent.config import PROMPTS_AGENTS_DIR
 from agent.registry import AGENT_REGISTRY
 
 # Lazy import WordSelectorAgent to avoid circular dependency
@@ -186,16 +186,20 @@ class LyricsComposerAgent(BaseAgent):
                 validation=validation,
             )
         else:
-            prompt = self._build_composition_prompt(
-                task=task,
-                syllable_count=syllable_count,
-                strong_beats=strong_beats,
-                melody_tone_sequence=melody_tone_sequence,
-                rhyme_positions=rhyme_positions,
-                reference_text=reference_text,
-                jyutping_map=jmap,
-                midi=midi,
-            )
+            # If the task string already looks like a formatted prompt (e.g. from orchestrator), use it directly
+            if "请创作恰好" in task or "0243 旋律目标" in task:
+                prompt = task
+            else:
+                prompt = self._build_composition_prompt(
+                    task=task,
+                    syllable_count=syllable_count,
+                    strong_beats=strong_beats,
+                    melody_tone_sequence=melody_tone_sequence,
+                    rhyme_positions=rhyme_positions,
+                    reference_text=reference_text,
+                    jyutping_map=jmap,
+                    midi=midi,
+                )
 
         # ----------------------------------------------------------------
         # Call the LLM (with tools if available, plain otherwise)
@@ -394,7 +398,7 @@ class LyricsComposerAgent(BaseAgent):
 
     @staticmethod
     def _render_prompt_template(template_name: str, **kwargs: Any) -> str:
-        template_path: Path = PROMPTS_DIR / template_name
+        template_path: Path = PROMPTS_AGENTS_DIR / template_name
         return template_path.read_text(encoding="utf-8").format(**kwargs).strip()
 
     # ------------------------------------------------------------------
