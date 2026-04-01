@@ -2,11 +2,17 @@
 """
 Cantonese Lyrics Agent – Main Entry Point
 ==========================================
-Run the multi-agent Cantonese lyric adaptation pipeline from the command line
-or drop into an interactive session.
+Run the multi-agent Cantonese lyric adaptation pipeline from the command line,
+drop into an interactive session, or launch a web-based GUI.
 
 Usage examples
 --------------
+# Launch the web GUI (recommended for demos)
+python src/main.py --gui
+
+# GUI on a custom port
+python src/main.py --gui --port 8080
+
 # Adapt a song into Cantonese from a MIDI file and source lyric/theme
 python src/main.py --midi song.mid --text "青山依舊在，幾度夕陽紅"
 
@@ -128,9 +134,16 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- Mode ---
     mode_group = parser.add_argument_group("Mode")
     mode_group.add_argument(
-        "--interactive", "-i",
+        "--gui",
         action="store_true",
-        help="Run in interactive mode: prompt for MIDI path and text each session.",
+        help="Launch the Gradio web interface instead of running in CLI mode.",
+    )
+    mode_group.add_argument(
+        "--port",
+        type=int,
+        default=7860,
+        metavar="PORT",
+        help="Port for the Gradio web interface (default: 7860).",
     )
 
     # --- LLM ---
@@ -491,6 +504,19 @@ def main() -> int:
 
     # Configure logging first
     _setup_logging(verbose=args.verbose)
+
+    # --- GUI mode ---
+    if args.gui:
+        from gui.app import create_ui
+
+        app = create_ui()
+        app.launch(
+            server_name="0.0.0.0",
+            server_port=args.port,
+            share=False,
+            show_error=True,
+        )
+        return 0
 
     # Apply CLI overrides to environment variables
     _apply_cli_overrides(args)
