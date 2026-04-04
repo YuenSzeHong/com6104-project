@@ -1,8 +1,8 @@
 """
 Pipeline runner with progress tracking.
 
-Executes the Cantonese lyrics generation pipeline step-by-step,
-yielding progress updates and agent conversation logs for real-time UI feedback.
+Subscribes to AgentOrchestrator events and streams progress updates,
+without duplicating orchestration business logic.
 """
 
 from __future__ import annotations
@@ -146,13 +146,28 @@ async def run_pipeline_with_progress(
     progress = PipelineProgress()
     progress.overall_status = "running"
 
-    # Define pipeline steps
-    progress.add_step("MIDI Analysis")
-    progress.add_step("Melody Mapping (0243)")
-    progress.add_step("Jyutping Conversion")
-    progress.add_step("Batch Word Candidate Query")
-    progress.add_step("Lyrics Composition (LLM)")
-    progress.add_step("Lyrics Validation")
+    # Define UI steps (driven by orchestrator events)
+    step_keys = [
+        "midi_analysis",
+        "melody_mapping",
+        "jyutping_conversion",
+        "candidate_query",
+        "lyrics_composition",
+        "lyrics_validation",
+    ]
+    step_labels = {
+        "midi_analysis": "MIDI Analysis",
+        "melody_mapping": "Melody Mapping (0243)",
+        "jyutping_conversion": "Jyutping Conversion",
+        "candidate_query": "Batch Word Candidate Query",
+        "lyrics_composition": "Lyrics Composition (LLM)",
+        "lyrics_validation": "Lyrics Validation",
+    }
+    step_index = {key: idx for idx, key in enumerate(step_keys)}
+    for key in step_keys:
+        progress.add_step(step_labels[key])
+
+    latest_lyrics = ""
 
     # Yield initial state
     yield progress.format_progress(), "", "*Waiting for pipeline to start...*"
@@ -160,317 +175,76 @@ async def run_pipeline_with_progress(
     try:
         async with AgentOrchestrator(session_id=session_id) as orch:
             memory = orch.memory
+            event_queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
 
-            # Step 1: MIDI Analysis
-            progress.start_step(0, "Analyzing MIDI file structure...")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
+            async def _on_event(event: dict[str, object]) -> None:
+                await event_queue.put(event)
 
-            midi_task = orch._call_tool_direct(
-                server_name="midi-analyzer",
-                tool_name="analyze_midi",
-                args={"file_path": midi_path},
-                parse_json=True,
-            )
-            durations_task = orch._call_tool_direct(
-                server_name="midi-analyzer",
-                tool_name="get_syllable_durations",
-                args={"file_path": midi_path},
-                parse_json=True,
-            )
-            rhyme_task = orch._call_tool_direct(
-                server_name="midi-analyzer",
-                tool_name="suggest_rhyme_positions",
-                args={"file_path": midi_path},
-                parse_json=True,
-            )
-            midi_analysis, durations, rhyme_positions_raw = await asyncio.gather(
-                midi_task, durations_task, rhyme_task, return_exceptions=True
-            )
-
-            midi_result = midi_analysis if isinstance(midi_analysis, dict) else {}
-            midi_result["syllable_durations"] = (
-                durations if isinstance(durations, list) else []
-            )
-            midi_result["rhyme_positions"] = (
-                rhyme_positions_raw if isinstance(rhyme_positions_raw, list) else []
-            )
-
-            syllable_count = int(
-                midi_result.get("effective_syllable_count", 0)
-                or midi_result.get("syllable_count", 0)
-            )
-            bpm = midi_result.get("bpm", 0)
-            progress.complete_step(0, f"✅ {syllable_count} syllables, {bpm:.0f} BPM")
-            orch.memory.set_pipeline_value("midi_analysis", midi_result)
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            # Step 2: Melody Mapping
-            progress.start_step(1, "Mapping melody to 0243 tone sequence...")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            melody_result = await orch._call_tool_direct(
-                server_name="melody-mapper",
-                tool_name="analyze_melody_contour",
-                args={"file_path": midi_path},
-                parse_json=True,
-            )
-            melody_analysis = melody_result if isinstance(melody_result, dict) else {}
-            tone_seq = [
-                int(t)
-                for t in melody_analysis.get("tone_sequence", [])
-                if isinstance(t, int | float | str) and str(t).isdigit()
-            ]
-            orch.memory.set_pipeline_value("melody_analysis", melody_analysis)
-
-            progress.complete_step(1, f"✅ {len(tone_seq)} tone positions mapped")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            # Step 3: Jyutping Conversion
-            progress.start_step(2, "Converting reference text to Jyutping...")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            jp_task = orch._call_tool_direct(
-                server_name="jyutping",
-                tool_name="chinese_to_jyutping",
-                args={"text": reference_text},
-                parse_json=True,
-            )
-            tone_pattern_task = orch._call_tool_direct(
-                server_name="jyutping",
-                tool_name="get_tone_pattern",
-                args={"text": reference_text},
-                parse_json=False,
-            )
-            tone_codes_task = orch._call_tool_direct(
-                server_name="jyutping",
-                tool_name="get_tone_code",
-                args={"text": reference_text},
-                parse_json=True,
-            )
-            jp_raw, tone_pattern_raw, tone_codes_raw = await asyncio.gather(
-                jp_task, tone_pattern_task, tone_codes_task, return_exceptions=True
-            )
-
-            jp_result = jp_raw if isinstance(jp_raw, list) else []
-            tone_codes = tone_codes_raw if isinstance(tone_codes_raw, list) else []
-            tone_pattern = str(tone_pattern_raw).strip() if tone_pattern_raw else ""
-
-            # Parse reference tone sequence
-            reference_tone_sequence = []
-            if isinstance(tone_pattern_raw, list):
-                tone_pattern_tokens = [str(tok) for tok in tone_pattern_raw]
-            else:
-                tone_pattern_tokens = str(tone_pattern_raw).split()
-
-            for tok in tone_pattern_tokens:
-                try:
-                    reference_tone_sequence.append(int(tok))
-                except ValueError:
-                    pass
-
-            jp_count = len(jp_result)
-            progress.complete_step(2, f"✅ {jp_count} Jyutping candidates")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            # Step 4: Batch Word Query
-            progress.start_step(3, "Querying word candidates by tone code...")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            strong_beats = midi_result.get("strong_beat_positions", [])
-            melody_tone_sequence = tone_seq
-
-            positions_needing_candidates = set()
-            positions_needing_candidates.update(str(p) for p in strong_beats[:16])
-
-            rhyme_positions = midi_result.get("rhyme_positions", [])
-            positions_needing_candidates.update(str(p) for p in rhyme_positions[:8])
-
-            position_tone_map = {}
-            for pos_str in positions_needing_candidates:
-                pos = int(pos_str)
-                beat_tone = (
-                    str(melody_tone_sequence[pos])
-                    if pos < len(melody_tone_sequence)
-                    else "4"
+            run_task = asyncio.create_task(
+                orch.run(
+                    midi_path=midi_path,
+                    reference_text=reference_text,
+                    event_callback=_on_event,
                 )
-                position_tone_map[pos_str] = beat_tone
+            )
 
-            unique_tone_codes = list(set(position_tone_map.values()))
-            strong_beat_candidates = {}
-            if unique_tone_codes:
-                batch_result = await orch._call_tool_direct(
-                    server_name="jyutping",
-                    tool_name="find_words_by_tone_code",
-                    args={"code": unique_tone_codes},
-                    parse_json=True,
-                )
-                batch_candidates = (
-                    batch_result if isinstance(batch_result, list) else []
-                )
-                tone_to_candidates = {}
-                for i, tone_code in enumerate(unique_tone_codes):
-                    if i < len(batch_candidates) and isinstance(
-                        batch_candidates[i], list
-                    ):
-                        tone_to_candidates[tone_code] = batch_candidates[i][:15]
+            while not run_task.done() or not event_queue.empty():
+                drained = False
+                while not event_queue.empty():
+                    drained = True
+                    event = await event_queue.get()
+                    ev_type = str(event.get("type", ""))
+                    ev_step = str(event.get("step", ""))
+                    ev_message = str(event.get("message", ""))
 
-                for pos_str, tone_code in position_tone_map.items():
-                    strong_beat_candidates[pos_str] = tone_to_candidates.get(
-                        tone_code, []
+                    if ev_type == "run_started":
+                        progress.overall_status = "running"
+                    elif ev_type == "step_started" and ev_step in step_index:
+                        progress.start_step(step_index[ev_step], ev_message)
+                    elif ev_type == "step_completed" and ev_step in step_index:
+                        # Complete any previous pending steps up to this one to keep UI coherent.
+                        idx = step_index[ev_step]
+                        for i in range(idx):
+                            if progress.steps[i].status == "pending":
+                                progress.complete_step(i, "✅ Completed")
+                        progress.complete_step(
+                            idx, f"✅ {ev_message}" if ev_message else "✅ Completed"
+                        )
+                    elif ev_type in {"accepted", "fallback_best_draft"}:
+                        lyrics_value = event.get("lyrics")
+                        if isinstance(lyrics_value, str):
+                            latest_lyrics = lyrics_value
+                    elif ev_type == "error":
+                        progress.overall_status = "error"
+                        progress.error_message = ev_message
+                    elif ev_type == "run_completed":
+                        if event.get("error"):
+                            progress.overall_status = "error"
+                            progress.error_message = str(event.get("error"))
+                        else:
+                            progress.overall_status = "done"
+                        lyrics_value = event.get("lyrics")
+                        if isinstance(lyrics_value, str):
+                            latest_lyrics = lyrics_value
+
+                if drained:
+                    yield (
+                        progress.format_progress(),
+                        latest_lyrics,
+                        _format_conversation_log(memory),
                     )
+                else:
+                    await asyncio.sleep(0.1)
 
-                total_candidates = sum(len(c) for c in tone_to_candidates.values())
-                progress.complete_step(
-                    3,
-                    f"✅ {len(unique_tone_codes)} tone codes → {total_candidates} candidates",
-                )
-            else:
-                progress.complete_step(3, "✅ No candidates needed")
+            result = await run_task
+            latest_lyrics = result.lyrics or latest_lyrics
+            progress.overall_status = "error" if result.error else "done"
+            if result.error:
+                progress.error_message = result.error
 
-            theme_tone_codes = await orch._extract_theme_tone_codes(reference_text)
-            theme_candidates = {}
-            if theme_tone_codes:
-                theme_candidates_raw = await orch._call_tool_direct(
-                    server_name="jyutping",
-                    tool_name="find_words_by_tone_code",
-                    args={"code": theme_tone_codes},
-                    parse_json=True,
-                )
-                theme_candidates_list = (
-                    theme_candidates_raw
-                    if isinstance(theme_candidates_raw, list)
-                    else []
-                )
-                for i, tone_code in enumerate(theme_tone_codes):
-                    if i < len(theme_candidates_list) and isinstance(
-                        theme_candidates_list[i], list
-                    ):
-                        theme_candidates[tone_code] = theme_candidates_list[i][:20]
-
-            jyutping_map = {
-                "reference_text": reference_text,
-                "selected_jyutping": jp_result[0]
-                if jp_result and isinstance(jp_result, list)
-                else "",
-                "all_candidates": jp_result,
-                "reference_tone_pattern": tone_pattern,
-                "reference_tone_sequence": reference_tone_sequence,
-                "tone_codes": tone_codes,
-                "melody_tone_sequence_0243": melody_tone_sequence,
-                "strong_beat_positions": strong_beats,
-                "strong_beat_candidates": strong_beat_candidates,
-                "rhyme_positions": rhyme_positions,
-                "theme_candidates": theme_candidates,
-                "target_syllable_count": syllable_count,
-            }
-            orch.memory.set_pipeline_value("jyutping_map", jyutping_map)
-
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            # Step 5: Lyrics Composition
-            progress.start_step(4, "LLM composing lyrics... (this may take a while)")
-            yield progress.format_progress(), "", _format_conversation_log(memory)
-
-            compose_task = orch._build_compose_task(
-                reference_text=reference_text,
-                syllable_count=syllable_count,
-                revision_instructions="",
-                attempt=0,
-            )
-
-            # Run agent as a background task so we can stream memory updates to GUI
-            agent_task = asyncio.create_task(
-                orch._run_agent(
-                    agent_name="lyrics-composer",
-                    task=compose_task,
-                    context_key="draft_lyrics",
-                )
-            )
-
-            # Yield updates every 0.1s while LLM runs
-            while not agent_task.done():
-                yield progress.format_progress(), "", _format_conversation_log(memory)
-                await asyncio.sleep(0.1)
-
-            try:
-                draft_output = agent_task.result()
-            except Exception as exc:
-                logger.error("Composer LLM failed: %s", exc)
-                draft_output = {}
-
-            draft_lyrics = (
-                draft_output.get("lyrics", "") if isinstance(draft_output, dict) else ""
-            )
-            draft_jyutping = (
-                draft_output.get("jyutping", "")
-                if isinstance(draft_output, dict)
-                else ""
-            )
-            progress.complete_step(4, f"✅ Lyrics composed ({len(draft_lyrics)} chars)")
             yield (
                 progress.format_progress(),
-                draft_lyrics,
-                _format_conversation_log(memory),
-            )
-
-            # Step 6: Validation
-            progress.start_step(5, "Validating lyrics quality...")
-            yield (
-                progress.format_progress(),
-                draft_lyrics,
-                _format_conversation_log(memory),
-            )
-
-            validate_task = orch._build_validate_task(
-                draft_lyrics=draft_lyrics,
-                draft_jyutping=draft_jyutping,
-                syllable_count=syllable_count,
-                melody_tone_sequence=tone_seq,
-                strong_beats=strong_beats,
-                rhyme_positions=rhyme_positions,
-                reference_text=reference_text,
-            )
-
-            # Yield updates every 0.1s while validator runs
-            val_agent_task = asyncio.create_task(
-                orch._run_agent(
-                    agent_name="validator",
-                    task=validate_task,
-                    context_key="validation_result",
-                )
-            )
-
-            while not val_agent_task.done():
-                yield (
-                    progress.format_progress(),
-                    draft_lyrics,
-                    _format_conversation_log(memory),
-                )
-                await asyncio.sleep(0.1)
-
-            try:
-                validation_output = val_agent_task.result()
-            except Exception as exc:
-                logger.error("Validator LLM failed: %s", exc)
-                validation_output = {}
-
-            score = (
-                validation_output.get("score", 0)
-                if isinstance(validation_output, dict)
-                else 0
-            )
-            progress.complete_step(5, f"✅ Score: {score:.2f}/1.00")
-            yield (
-                progress.format_progress(),
-                draft_lyrics,
-                _format_conversation_log(memory),
-            )
-
-            # Done
-            progress.overall_status = "done"
-            yield (
-                progress.format_progress(),
-                draft_lyrics,
+                latest_lyrics,
                 _format_conversation_log(memory),
             )
 

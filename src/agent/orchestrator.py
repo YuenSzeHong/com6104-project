@@ -43,7 +43,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from langchain_core.language_models import BaseChatModel
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -61,6 +61,8 @@ from .memory import ShortTermMemory
 from .registry import AGENT_REGISTRY, MCP_REGISTRY
 
 logger = logging.getLogger(__name__)
+
+PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +193,7 @@ class AgentOrchestrator:
         self,
         midi_path: str | Path,
         reference_text: str,
+        event_callback: PipelineEventCallback | None = None,
     ) -> PipelineResult:
         """
         执行完整的歌词生成流水线。
@@ -242,6 +245,14 @@ class AgentOrchestrator:
         result = PipelineResult(session_id=self._memory.session_id)
 
         logger.info("流水线开始 – midi=%s | text='%s'", midi_path, reference_text[:60])
+        await self._emit_event(
+            event_callback,
+            {
+                "type": "run_started",
+                "session_id": self._memory.session_id,
+                "midi_path": str(midi_path),
+            },
+        )
 
         self._memory.set_artifact("source_text", reference_text)
         self._memory.set_run_status(
@@ -255,6 +266,14 @@ class AgentOrchestrator:
             # ----------------------------------------------------------
             # Step 1a: 直接调用 MCP 工具完成 MIDI 分析（无 LLM）
             # ----------------------------------------------------------
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_started",
+                    "step": "midi_analysis",
+                    "message": "Analyzing MIDI file structure...",
+                },
+            )
             logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
 
             # 并行调用 MIDI analyzer 的三个工具
@@ -306,10 +325,30 @@ class AgentOrchestrator:
                 result.midi_analysis.get("bpm", "?"),
                 result.midi_analysis.get("key", "?"),
             )
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_completed",
+                    "step": "midi_analysis",
+                    "message": f"{syllable_count} syllables, {result.midi_analysis.get('bpm', 0):.0f} BPM",
+                    "metrics": {
+                        "syllable_count": syllable_count,
+                        "bpm": result.midi_analysis.get("bpm", 0),
+                    },
+                },
+            )
 
             # ----------------------------------------------------------
             # Step 1b: 并行调用 MCP 工具完成 0243 旋律映射（无 LLM）
             # ----------------------------------------------------------
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_started",
+                    "step": "melody_mapping",
+                    "message": "Mapping melody to 0243 tone sequence...",
+                },
+            )
             logger.info("Step 1b: 并行调用 MCP 工具映射 0243 旋律声调…")
 
             # 并行调用 melody-mapper 和 jyutping 工具
@@ -482,15 +521,60 @@ class AgentOrchestrator:
                 " ".join(str(t) for t in melody_tone_sequence[:16]) or "(none)",
                 tone_pattern[:40] if tone_pattern else "(none)",
             )
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_completed",
+                    "step": "melody_mapping",
+                    "message": f"{len(melody_tone_sequence)} tone positions mapped",
+                },
+            )
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_completed",
+                    "step": "jyutping_conversion",
+                    "message": f"{len(jp_candidates)} Jyutping candidates",
+                },
+            )
+
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_completed",
+                    "step": "candidate_query",
+                    "message": (
+                        f"{len(unique_tone_codes)} tone codes, "
+                        f"theme groups={len(theme_candidates)}"
+                    ),
+                },
+            )
 
             # ----------------------------------------------------------
             # Step 2: LLM 代理循环（创作 → 校验）
             # ----------------------------------------------------------
             revision_instructions: str = ""
 
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "step_started",
+                    "step": "lyrics_composition",
+                    "message": "LLM composing lyrics...",
+                },
+            )
+
             for attempt in range(self._max_revision_loops + 1):
                 logger.info(
                     "创作尝试 %d/%d", attempt + 1, self._max_revision_loops + 1
+                )
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "attempt_started",
+                        "attempt": attempt + 1,
+                        "max_attempts": self._max_revision_loops + 1,
+                    },
                 )
 
                 # --- 歌词创作（LLM 代理）---
@@ -515,6 +599,26 @@ class AgentOrchestrator:
                     if isinstance(draft_output, dict) else ""
                 )
                 result.draft_history.append(draft_lyrics)
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "step_completed",
+                        "step": "lyrics_composition",
+                        "message": f"Lyrics composed ({len(draft_lyrics)} chars)",
+                        "lyrics": draft_lyrics,
+                        "attempt": attempt + 1,
+                    },
+                )
+
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "step_started",
+                        "step": "lyrics_validation",
+                        "message": "Validating lyrics quality...",
+                        "attempt": attempt + 1,
+                    },
+                )
 
                 # --- 歌词校验（LLM 代理）---
                 validate_task = self._build_validate_task(
@@ -556,6 +660,16 @@ class AgentOrchestrator:
                     "校验第 %d 次：score=%.2f（阈值=%.2f）",
                     attempt + 1, score, self._min_quality_score,
                 )
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "step_completed",
+                        "step": "lyrics_validation",
+                        "message": f"Score: {score:.2f}/1.00",
+                        "score": score,
+                        "attempt": attempt + 1,
+                    },
+                )
 
                 if score >= self._min_quality_score:
                     result.lyrics   = draft_lyrics
@@ -566,6 +680,15 @@ class AgentOrchestrator:
                         score=score,
                     )
                     logger.info("✓ 歌词已在第 %d 次尝试时通过验收", attempt + 1)
+                    await self._emit_event(
+                        event_callback,
+                        {
+                            "type": "accepted",
+                            "attempt": attempt + 1,
+                            "score": score,
+                            "lyrics": draft_lyrics,
+                        },
+                    )
                     break
 
                 corrections: list[str] = (
@@ -584,6 +707,15 @@ class AgentOrchestrator:
                 self._memory.add_ai_message(
                     f"[第 {attempt + 1} 轮修改] 得分偏低（{score:.2f}），"
                     f"根据以下反馈修改：{feedback}"
+                )
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "revision_requested",
+                        "attempt": attempt + 1,
+                        "score": score,
+                        "message": feedback,
+                    },
                 )
 
                 best_result = self._memory.get_best_result()
@@ -608,12 +740,30 @@ class AgentOrchestrator:
                     best_idx + 1,
                     result.validator_scores[best_idx] if result.validator_scores else 0,
                 )
+                await self._emit_event(
+                    event_callback,
+                    {
+                        "type": "fallback_best_draft",
+                        "attempt": best_idx + 1,
+                        "score": result.validator_scores[best_idx]
+                        if result.validator_scores
+                        else 0,
+                        "lyrics": result.lyrics,
+                    },
+                )
 
         except Exception as exc:  # noqa: BLE001
             logger.exception("流水线错误: %s", exc)
             result.error = str(exc)
             self._memory.set_run_status(error=str(exc))
             self._memory.add_ai_message(f"[错误] 流水线失败：{exc}")
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "error",
+                    "message": str(exc),
+                },
+            )
 
         result.elapsed_seconds = time.perf_counter() - t0
         logger.info(
@@ -636,7 +786,33 @@ class AgentOrchestrator:
             revision_count=result.revision_count,
             error=result.error,
         )
+        await self._emit_event(
+            event_callback,
+            {
+                "type": "run_completed",
+                "accepted": result.accepted,
+                "revision_count": result.revision_count,
+                "elapsed_seconds": result.elapsed_seconds,
+                "lyrics": result.lyrics,
+                "error": result.error,
+            },
+        )
         return result
+
+    async def _emit_event(
+        self,
+        callback: PipelineEventCallback | None,
+        event: dict[str, Any],
+    ) -> None:
+        """Emit a pipeline event to observers without interrupting the run on callback errors."""
+        if callback is None:
+            return
+        try:
+            maybe_awaitable = callback(event)
+            if asyncio.iscoroutine(maybe_awaitable):
+                await maybe_awaitable
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pipeline event callback failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Convenience accessors
