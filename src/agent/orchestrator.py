@@ -58,6 +58,8 @@ from .config import (
     WORKFLOW_CONFIG,
 )
 from .errors import ConstraintViolation, ParseError, ToolInvokeError
+from .workflow_graph import build_workflow_graph, decide_after_validation
+from .utils.constraint_filter import CandidateConstraintEngine
 from .utils.mcp import normalize_mcp_result
 from .memory import ShortTermMemory
 from .registry import AGENT_REGISTRY, MCP_REGISTRY
@@ -160,6 +162,8 @@ class AgentOrchestrator:
             os.getenv("WORD_SELECTOR_THRESHOLD", "10")
         )
         self._pipeline_state: str = _STATE_STARTING
+        self._workflow_graph = build_workflow_graph()
+        self._candidate_constraint_engine = CandidateConstraintEngine()
 
         logger.info(
             "AgentOrchestrator 已初始化  provider=%s  session=%s",
@@ -778,7 +782,19 @@ class AgentOrchestrator:
                         "message": feedback,
                     },
                 )
-                self._transition_state(_STATE_COMPOSITION)
+                decision = decide_after_validation(
+                    {
+                        "score": score,
+                        "min_quality_score": self._min_quality_score,
+                        "attempt": attempt,
+                        "max_attempts": self._max_revision_loops + 1,
+                    }
+                )
+                if decision.next_stage == "compose":
+                    self._transition_state(_STATE_COMPOSITION)
+                else:
+                    self._transition_state(_STATE_COMPLETED)
+                    break
 
                 best_result = self._memory.get_best_result()
                 best_score = float(best_result.get("score", float("-inf")) or float("-inf"))
@@ -1207,13 +1223,7 @@ class AgentOrchestrator:
             if pos_str not in strong_set and pos_str not in rhyme_set:
                 continue
 
-            constrained_candidates = [
-                item
-                for item in candidates
-                if isinstance(item, str)
-                and len(item.strip()) == 1
-                and "\u4e00" <= item.strip() <= "\u9fff"
-            ]
+            constrained_candidates = self._candidate_constraint_engine.apply(candidates)
             if not constrained_candidates:
                 continue
 
