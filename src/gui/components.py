@@ -24,16 +24,16 @@ def build_input_panel() -> tuple[gr.File, gr.Textbox, gr.File, gr.Textbox, gr.Bu
         type="filepath",
     )
 
-    text_input = gr.Textbox(
-        label="Reference Text / Theme",
-        placeholder="Enter source lyric or theme text...",
-        lines=3,
-    )
-
     text_file_input = gr.File(
-        label="Or upload text file",
+        label="Reference Text File (Primary)",
         file_types=[".txt", ".md"],
         type="filepath",
+    )
+
+    text_input = gr.Textbox(
+        label="Reference Text / Theme (Optional Fallback)",
+        placeholder="Paste source lyric/theme only if no file is uploaded...",
+        lines=3,
     )
 
     session_id_input = gr.Textbox(
