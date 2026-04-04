@@ -69,6 +69,7 @@ import json
 import logging
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -93,6 +94,7 @@ _API_URL        = "https://www.0243.hk/api/cls/"
 _TIMEOUT        = 15.0   # seconds
 _MAX_RETRIES    = 3
 _RETRY_DELAY    = 1.0    # seconds between retries
+_LOCAL_POSTFIX_PATH = Path(__file__).parent / "data" / "postfix_m1_all.json"
 
 # Matches a complete Jyutping syllable: letters + tone digit 1-6
 # e.g. "sing1", "tau3", "ming4"
@@ -100,6 +102,64 @@ _JP_SYLLABLE_RE = re.compile(r"[a-z]+[1-6]", re.IGNORECASE)
 
 # Matches a purely numeric string (the tone codes returned by the API)
 _NUMERIC_RE = re.compile(r"^\d+$")
+
+
+def _load_local_postfix_map() -> dict[str, list[str]]:
+    """Load local tone-code fallback lexicon from a JSON snapshot file."""
+    if not _LOCAL_POSTFIX_PATH.exists():
+        logger.info("Local postfix snapshot not found: %s", _LOCAL_POSTFIX_PATH)
+        return {}
+
+    try:
+        payload = json.loads(_LOCAL_POSTFIX_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to load local postfix snapshot: %s", exc)
+        return {}
+
+    if not isinstance(payload, dict):
+        logger.warning(
+            "Invalid local postfix snapshot format: %s",
+            type(payload).__name__,
+        )
+        return {}
+
+    normalized: dict[str, list[str]] = {}
+    for key, value in payload.items():
+        tone_code = str(key).strip()
+        if not tone_code or not _NUMERIC_RE.match(tone_code):
+            continue
+        if not isinstance(value, list):
+            continue
+
+        words: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text and re.search(r"[\u4e00-\u9fff]", text):
+                words.append(text)
+
+        if words:
+            normalized[tone_code] = list(dict.fromkeys(words))
+
+    logger.info(
+        "Loaded local postfix snapshot: %d tone codes from %s",
+        len(normalized),
+        _LOCAL_POSTFIX_PATH,
+    )
+    return normalized
+
+
+def _merge_words(remote_words: list[str], local_words: list[str]) -> list[str]:
+    """Merge remote and local candidate lists with stable de-duplication."""
+    merged: list[str] = []
+    for word in [*remote_words, *local_words]:
+        if not word:
+            continue
+        if word not in merged:
+            merged.append(word)
+    return merged
+
+
+_LOCAL_POSTFIX_MAP: dict[str, list[str]] = _load_local_postfix_map()
 
 
 async def _call_api(nums: str | list[str]) -> list[Any]:
@@ -458,13 +518,23 @@ async def find_words_by_tone_code(code: str | int | list[Any]) -> str:
                 return json.dumps({"error": f"输入必须为纯数字字符串，收到：{token!r}"})
 
         logger.info("find_words_by_tone_code: batch codes=%r", normalized)
-        candidates_list = await _call_api(normalized)  # Expected: list[list[str]]
+        try:
+            candidates_list = await _call_api(normalized)  # Expected: list[list[str]]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "find_words_by_tone_code (batch): remote API failed, fallback to local snapshot: %s",
+                exc,
+            )
+            candidates_list = []
 
         results: list[list[str]] = []
-        for candidates in candidates_list:
+        for idx, tone_code in enumerate(normalized):
+            candidates = candidates_list[idx] if idx < len(candidates_list) else []
             # Filter Chinese results for each sublist
             chinese_words = [c for c in candidates if _is_chinese(c)]
-            results.append(chinese_words if chinese_words else candidates)
+            remote_words = chinese_words if chinese_words else candidates
+            local_words = _LOCAL_POSTFIX_MAP.get(tone_code, [])
+            results.append(_merge_words(remote_words, local_words))
 
         logger.info("find_words_by_tone_code: batch → %d items", len(results))
         return json.dumps(results, ensure_ascii=False)
@@ -478,13 +548,22 @@ async def find_words_by_tone_code(code: str | int | list[Any]) -> str:
         return json.dumps({"error": f"输入必须为纯数字字符串，收到：{code!r}"})
 
     logger.info("find_words_by_tone_code: code=%r", code)
-    candidates = await _call_api(code)
+    try:
+        candidates = await _call_api(code)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "find_words_by_tone_code: remote API failed, fallback to local snapshot: %s",
+            exc,
+        )
+        candidates = []
 
     # Return only Chinese word results (filter out Jyutping and numeric responses)
     chinese_words = [c for c in candidates if _is_chinese(c)]
 
     # If no Chinese-only results, return everything (some codes return mixed)
-    results = chinese_words if chinese_words else candidates
+    remote_words = chinese_words if chinese_words else candidates
+    local_words = _LOCAL_POSTFIX_MAP.get(code, [])
+    results = _merge_words(remote_words, local_words)
 
     logger.info(
         "find_words_by_tone_code: code=%r → %d 个结果", code, len(results)
