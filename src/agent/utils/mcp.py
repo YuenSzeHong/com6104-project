@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from agent.errors import ParseError
+
 
 def unwrap_mcp_payload(raw: Any) -> Any:
     """
@@ -47,7 +49,12 @@ def unwrap_mcp_payload(raw: Any) -> Any:
     return raw
 
 
-def normalize_mcp_result(raw: Any, *, parse_json: bool = True) -> Any:
+def normalize_mcp_result(
+    raw: Any,
+    *,
+    parse_json: bool = True,
+    strict_json: bool = False,
+) -> Any:
     """
     Normalize MCP tool results and optionally parse JSON-like text payloads.
     """
@@ -60,9 +67,15 @@ def normalize_mcp_result(raw: Any, *, parse_json: bool = True) -> Any:
         return raw
 
     if isinstance(raw, str):
+        stripped = raw.strip()
         try:
             return json.loads(raw)
         except (json.JSONDecodeError, ValueError):
+            if strict_json and stripped.startswith(("{", "[")):
+                raise ParseError(
+                    "MCP result JSON parsing failed",
+                    context={"payload_preview": stripped[:180]},
+                )
             return raw
 
     return raw

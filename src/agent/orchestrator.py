@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,6 +57,7 @@ from .config import (
     PROVIDER,
     WORKFLOW_CONFIG,
 )
+from .errors import AgentRuntimeError, ParseError, ToolInvokeError
 from .utils.mcp import normalize_mcp_result
 from .memory import ShortTermMemory
 from .registry import AGENT_REGISTRY, MCP_REGISTRY
@@ -136,6 +138,9 @@ class AgentOrchestrator:
 
         self._max_revision_loops: int   = WORKFLOW_CONFIG["max_revision_loops"]
         self._min_quality_score:  float = WORKFLOW_CONFIG["min_quality_score"]
+        self._word_selector_threshold: int = int(
+            os.getenv("WORD_SELECTOR_THRESHOLD", "10")
+        )
 
         logger.info(
             "AgentOrchestrator 已初始化  provider=%s  session=%s",
@@ -277,23 +282,29 @@ class AgentOrchestrator:
             logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
 
             # 并行调用 MIDI analyzer 的三个工具
-            midi_task = self._call_tool_direct(
+            midi_task = self._call_tool_direct_safe(
                 server_name="midi-analyzer",
                 tool_name="analyze_midi",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
+                default={},
+                event_callback=event_callback,
             )
-            durations_task = self._call_tool_direct(
+            durations_task = self._call_tool_direct_safe(
                 server_name="midi-analyzer",
                 tool_name="get_syllable_durations",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
+                default=[],
+                event_callback=event_callback,
             )
-            rhyme_task = self._call_tool_direct(
+            rhyme_task = self._call_tool_direct_safe(
                 server_name="midi-analyzer",
                 tool_name="suggest_rhyme_positions",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
+                default=[],
+                event_callback=event_callback,
             )
 
             # 等待所有任务完成
@@ -352,29 +363,37 @@ class AgentOrchestrator:
             logger.info("Step 1b: 并行调用 MCP 工具映射 0243 旋律声调…")
 
             # 并行调用 melody-mapper 和 jyutping 工具
-            melody_task = self._call_tool_direct(
+            melody_task = self._call_tool_direct_safe(
                 server_name="melody-mapper",
                 tool_name="analyze_melody_contour",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
+                default={},
+                event_callback=event_callback,
             )
-            jp_task = self._call_tool_direct(
+            jp_task = self._call_tool_direct_safe(
                 server_name="jyutping",
                 tool_name="chinese_to_jyutping",
                 args={"text": reference_text},
                 parse_json=True,
+                default=[],
+                event_callback=event_callback,
             )
-            tone_pattern_task = self._call_tool_direct(
+            tone_pattern_task = self._call_tool_direct_safe(
                 server_name="jyutping",
                 tool_name="get_tone_pattern",
                 args={"text": reference_text},
                 parse_json=False,
+                default="",
+                event_callback=event_callback,
             )
-            tone_codes_task = self._call_tool_direct(
+            tone_codes_task = self._call_tool_direct_safe(
                 server_name="jyutping",
                 tool_name="get_tone_code",
                 args={"text": reference_text},
                 parse_json=True,
+                default=[],
+                event_callback=event_callback,
             )
 
             # 等待所有任务完成
@@ -440,11 +459,13 @@ class AgentOrchestrator:
             unique_tone_codes = list(set(position_tone_map.values()))
             if unique_tone_codes:
                 # BATCH API call - query all tone codes at once
-                batch_candidates_raw = await self._call_tool_direct(
+                batch_candidates_raw = await self._call_tool_direct_safe(
                     server_name="jyutping",
                     tool_name="find_words_by_tone_code",
                     args={"code": unique_tone_codes},  # Batch call!
                     parse_json=True,
+                    default=[],
+                    event_callback=event_callback,
                 )
 
                 # Parse batch results: returns list of lists [[words_for_code1], [words_for_code2], ...]
@@ -478,11 +499,13 @@ class AgentOrchestrator:
             theme_candidates: dict[str, list[str]] = {}
             if theme_tone_codes:
                 # Batch query theme-related tone codes
-                theme_candidates_raw = await self._call_tool_direct(
+                theme_candidates_raw = await self._call_tool_direct_safe(
                     server_name="jyutping",
                     tool_name="find_words_by_tone_code",
                     args={"code": theme_tone_codes},
                     parse_json=True,
+                    default=[],
+                    event_callback=event_callback,
                 )
 
                 theme_candidates_list: list[list[str]] = (
@@ -598,6 +621,19 @@ class AgentOrchestrator:
                     draft_output.get("jyutping", "")
                     if isinstance(draft_output, dict) else ""
                 )
+
+                if isinstance(draft_output, dict):
+                    draft_output = await self._apply_orchestrator_word_selection(
+                        draft_output=draft_output,
+                        candidate_map=strong_beat_candidates,
+                        strong_beats=strong_beats,
+                        rhyme_positions=rhyme_positions,
+                        melody_tone_sequence=melody_tone_sequence,
+                        reference_text=reference_text,
+                        event_callback=event_callback,
+                    )
+                    draft_lyrics = str(draft_output.get("lyrics", draft_lyrics))
+
                 result.draft_history.append(draft_lyrics)
                 await self._emit_event(
                     event_callback,
@@ -919,11 +955,13 @@ class AgentOrchestrator:
         from .agents import (
             LyricsComposerAgent,
             ValidatorAgent,
+            WordSelectorAgent,
         )
 
         _builtin: dict[str, type] = {
             "lyrics-composer": LyricsComposerAgent,
             "validator":       ValidatorAgent,
+            "word-selector":   WordSelectorAgent,
         }
         for agent_name, cls in _builtin.items():
             if not AGENT_REGISTRY.has_class(agent_name):
@@ -969,6 +1007,7 @@ class AgentOrchestrator:
         agent_name: str,
         task: str,
         context_key: str,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         调用一个 LLM 代理执行任务，返回其结构化输出 dict。
@@ -987,7 +1026,7 @@ class AgentOrchestrator:
         logger.info(">>> LLM 代理：%s", agent_name)
 
         try:
-            agent_result = await agent.run(task)
+            agent_result = await agent.run(task, **kwargs)
             data: dict[str, Any] = (
                 agent_result.data if hasattr(agent_result, "data") else {}
             )
@@ -1027,33 +1066,195 @@ class AgentOrchestrator:
 
         Returns
         -------
-        解析后的 Python 对象（dict / list / str），出错时返回 None。
+        解析后的 Python 对象（dict / list / str）。
+
+        Raises
+        ------
+        ToolInvokeError
+            When the tool is not registered or invocation fails.
+        ParseError
+            When strict JSON parsing is requested and payload is malformed.
         """
         tool = MCP_REGISTRY.get_all_tools()
         tool_obj = next((t for t in tool if t.name == tool_name), None)
 
         if tool_obj is None:
-            logger.warning(
-                "_call_tool_direct: 工具 '%s' 未在 MCP 注册表中找到（服务器：%s）",
-                tool_name, server_name,
+            raise ToolInvokeError(
+                "Tool not found in MCP registry",
+                context={"server": server_name, "tool": tool_name, "args": args},
             )
-            return None
 
         logger.debug("_call_tool_direct: %s.%s(%s)", server_name, tool_name, args)
 
         try:
             raw = await tool_obj.ainvoke(args)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "_call_tool_direct: %s.%s 调用失败: %s", server_name, tool_name, exc
-            )
-            return None
+            raise ToolInvokeError(
+                "MCP tool invocation failed",
+                context={
+                    "server": server_name,
+                    "tool": tool_name,
+                    "args": args,
+                    "cause": str(exc),
+                },
+            ) from exc
 
-        return normalize_mcp_result(raw, parse_json=parse_json)
+        return normalize_mcp_result(
+            raw,
+            parse_json=parse_json,
+            strict_json=parse_json,
+        )
+
+    async def _call_tool_direct_safe(
+        self,
+        server_name: str,
+        tool_name: str,
+        args: dict[str, Any],
+        *,
+        parse_json: bool,
+        default: Any,
+        event_callback: PipelineEventCallback | None = None,
+    ) -> Any:
+        """Best-effort wrapper that degrades gracefully at pipeline boundary."""
+        try:
+            return await self._call_tool_direct(
+                server_name=server_name,
+                tool_name=tool_name,
+                args=args,
+                parse_json=parse_json,
+            )
+        except (ToolInvokeError, ParseError) as exc:
+            logger.warning(
+                "Tool boundary degraded: %s.%s | %s", server_name, tool_name, exc
+            )
+            await self._emit_event(
+                event_callback,
+                {
+                    "type": "tool_error",
+                    "server": server_name,
+                    "tool": tool_name,
+                    "message": str(exc),
+                },
+            )
+            return default
 
     # ------------------------------------------------------------------
     # Internal: compose-task builder
     # ------------------------------------------------------------------
+
+    async def _apply_orchestrator_word_selection(
+        self,
+        draft_output: dict[str, Any],
+        candidate_map: dict[str, list[str]],
+        strong_beats: list[int],
+        rhyme_positions: list[int],
+        melody_tone_sequence: list[int],
+        reference_text: str,
+        event_callback: PipelineEventCallback | None,
+    ) -> dict[str, Any]:
+        """Apply explicit word-selector strategy when candidate sets are large."""
+        if "word-selector" not in self._agents:
+            return draft_output
+
+        raw_lyrics = str(draft_output.get("lyrics", ""))
+        lyric_chars = list(raw_lyrics.replace("\n", ""))
+        if not lyric_chars:
+            return draft_output
+
+        strong_set = set(str(pos) for pos in strong_beats)
+        rhyme_set = set(str(pos) for pos in rhyme_positions)
+        selection_targets: list[tuple[int, list[str]]] = []
+        for pos_str, candidates in candidate_map.items():
+            if not isinstance(candidates, list) or len(candidates) <= self._word_selector_threshold:
+                continue
+            if pos_str not in strong_set and pos_str not in rhyme_set:
+                continue
+            try:
+                position = int(pos_str)
+            except ValueError:
+                continue
+            if position < 0 or position >= len(lyric_chars):
+                continue
+            selection_targets.append((position, candidates))
+
+        if not selection_targets:
+            return draft_output
+
+        applied = 0
+        for position, candidates in sorted(selection_targets):
+            context = {
+                "position": f"第 {position + 1} 字",
+                "surrounding_before": raw_lyrics[max(0, position - 5):position],
+                "surrounding_after": raw_lyrics[position + 1: position + 6],
+                "melody_tone": (
+                    str(melody_tone_sequence[position])
+                    if position < len(melody_tone_sequence)
+                    else None
+                ),
+                "semantic_field": reference_text[:50],
+                "theme": "歌词创作",
+                "rhyme_requirement": "需与押韵位置协调"
+                if str(position) in rhyme_set
+                else "",
+            }
+
+            selection = await self._run_agent(
+                agent_name="word-selector",
+                task=f"为歌词位置 {position} 选择最合适的词语",
+                context_key="selected_words",
+                candidates=candidates,
+                context=context,
+                count=1,
+            )
+
+            selected_word = ""
+            if isinstance(selection, dict):
+                if isinstance(selection.get("word"), str):
+                    selected_word = str(selection.get("word", ""))
+                elif isinstance(selection.get("selected_words"), list) and selection["selected_words"]:
+                    first = selection["selected_words"][0]
+                    if isinstance(first, dict):
+                        selected_word = str(first.get("word", ""))
+
+            if len(selected_word) == 1:
+                lyric_chars[position] = selected_word
+                applied += 1
+
+        if applied == 0:
+            return draft_output
+
+        rebuilt = self._rebuild_lyrics_with_original_breaks(raw_lyrics, lyric_chars)
+        draft_output["lyrics"] = rebuilt
+        self._memory.set_pipeline_value("orchestrator_word_selection_applied", True)
+
+        await self._emit_event(
+            event_callback,
+            {
+                "type": "word_selector_applied",
+                "applied_count": applied,
+                "target_count": len(selection_targets),
+                "threshold": self._word_selector_threshold,
+            },
+        )
+        return draft_output
+
+    @staticmethod
+    def _rebuild_lyrics_with_original_breaks(
+        original_lyrics: str,
+        flat_chars: list[str],
+    ) -> str:
+        """Rebuild line breaks after character-level replacements."""
+        lines = original_lyrics.splitlines()
+        if not lines:
+            return "".join(flat_chars)
+
+        rebuilt_lines: list[str] = []
+        cursor = 0
+        for line in lines:
+            line_len = len(line)
+            rebuilt_lines.append("".join(flat_chars[cursor: cursor + line_len]))
+            cursor += line_len
+        return "\n".join(rebuilt_lines)
 
     def _build_compose_task(
         self,
