@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent.errors import ToolInvokeError
+from agent.errors import ConstraintViolation, ToolInvokeError
 from agent.memory import ShortTermMemory
 from agent.orchestrator import AgentOrchestrator
 from agent.registry import MCP_REGISTRY
@@ -44,7 +44,7 @@ async def test_orchestrator_explicit_word_selector_trigger(monkeypatch):
     result = await orchestrator._apply_orchestrator_word_selection(
         draft_output=draft,
         candidate_map={
-            "1": [f"候选{i}" for i in range(11)],
+            "1": ["天", "海", "云", "风", "山", "雨", "夜", "光", "星", "梦", "火"],
             "2": [f"短{i}" for i in range(4)],
         },
         strong_beats=[1],
@@ -55,3 +55,11 @@ async def test_orchestrator_explicit_word_selector_trigger(monkeypatch):
     )
 
     assert result["lyrics"] == "天海人和"
+
+
+def test_pipeline_state_transition_guard_raises_on_invalid_transition():
+    orchestrator = AgentOrchestrator(llm=_DummyLlm(), memory=ShortTermMemory())
+
+    orchestrator._pipeline_state = "validation"
+    with pytest.raises(ConstraintViolation):
+        orchestrator._transition_state("midi_analysis")

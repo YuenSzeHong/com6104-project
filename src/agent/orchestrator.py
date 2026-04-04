@@ -57,7 +57,7 @@ from .config import (
     PROVIDER,
     WORKFLOW_CONFIG,
 )
-from .errors import AgentRuntimeError, ParseError, ToolInvokeError
+from .errors import ConstraintViolation, ParseError, ToolInvokeError
 from .utils.mcp import normalize_mcp_result
 from .memory import ShortTermMemory
 from .registry import AGENT_REGISTRY, MCP_REGISTRY
@@ -65,6 +65,24 @@ from .registry import AGENT_REGISTRY, MCP_REGISTRY
 logger = logging.getLogger(__name__)
 
 PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+_STATE_STARTING = "starting"
+_STATE_MIDI_ANALYSIS = "midi_analysis"
+_STATE_MELODY_MAPPING = "melody_mapping"
+_STATE_COMPOSITION = "composition"
+_STATE_VALIDATION = "validation"
+_STATE_COMPLETED = "completed"
+_STATE_ERROR = "error"
+
+_ALLOWED_STATE_TRANSITIONS: dict[str, set[str]] = {
+    _STATE_STARTING: {_STATE_MIDI_ANALYSIS, _STATE_ERROR},
+    _STATE_MIDI_ANALYSIS: {_STATE_MELODY_MAPPING, _STATE_ERROR},
+    _STATE_MELODY_MAPPING: {_STATE_COMPOSITION, _STATE_ERROR},
+    _STATE_COMPOSITION: {_STATE_VALIDATION, _STATE_ERROR},
+    _STATE_VALIDATION: {_STATE_COMPOSITION, _STATE_COMPLETED, _STATE_ERROR},
+    _STATE_COMPLETED: set(),
+    _STATE_ERROR: set(),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +159,7 @@ class AgentOrchestrator:
         self._word_selector_threshold: int = int(
             os.getenv("WORD_SELECTOR_THRESHOLD", "10")
         )
+        self._pipeline_state: str = _STATE_STARTING
 
         logger.info(
             "AgentOrchestrator 已初始化  provider=%s  session=%s",
@@ -248,6 +267,7 @@ class AgentOrchestrator:
 
         t0     = time.perf_counter()
         result = PipelineResult(session_id=self._memory.session_id)
+        self._pipeline_state = _STATE_STARTING
 
         logger.info("流水线开始 – midi=%s | text='%s'", midi_path, reference_text[:60])
         await self._emit_event(
@@ -279,6 +299,7 @@ class AgentOrchestrator:
                     "message": "Analyzing MIDI file structure...",
                 },
             )
+            self._transition_state(_STATE_MIDI_ANALYSIS)
             logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
 
             # 并行调用 MIDI analyzer 的三个工具
@@ -360,6 +381,7 @@ class AgentOrchestrator:
                     "message": "Mapping melody to 0243 tone sequence...",
                 },
             )
+            self._transition_state(_STATE_MELODY_MAPPING)
             logger.info("Step 1b: 并行调用 MCP 工具映射 0243 旋律声调…")
 
             # 并行调用 melody-mapper 和 jyutping 工具
@@ -586,6 +608,7 @@ class AgentOrchestrator:
                     "message": "LLM composing lyrics...",
                 },
             )
+            self._transition_state(_STATE_COMPOSITION)
 
             for attempt in range(self._max_revision_loops + 1):
                 logger.info(
@@ -655,6 +678,7 @@ class AgentOrchestrator:
                         "attempt": attempt + 1,
                     },
                 )
+                self._transition_state(_STATE_VALIDATION)
 
                 # --- 歌词校验（LLM 代理）---
                 validate_task = self._build_validate_task(
@@ -725,6 +749,7 @@ class AgentOrchestrator:
                             "lyrics": draft_lyrics,
                         },
                     )
+                    self._transition_state(_STATE_COMPLETED)
                     break
 
                 corrections: list[str] = (
@@ -753,6 +778,7 @@ class AgentOrchestrator:
                         "message": feedback,
                     },
                 )
+                self._transition_state(_STATE_COMPOSITION)
 
                 best_result = self._memory.get_best_result()
                 best_score = float(best_result.get("score", float("-inf")) or float("-inf"))
@@ -791,6 +817,7 @@ class AgentOrchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.exception("流水线错误: %s", exc)
             result.error = str(exc)
+            self._pipeline_state = _STATE_ERROR
             self._memory.set_run_status(error=str(exc))
             self._memory.add_ai_message(f"[错误] 流水线失败：{exc}")
             await self._emit_event(
@@ -834,6 +861,16 @@ class AgentOrchestrator:
             },
         )
         return result
+
+    def _transition_state(self, next_state: str) -> None:
+        """Validate and apply a pipeline state transition."""
+        allowed = _ALLOWED_STATE_TRANSITIONS.get(self._pipeline_state, set())
+        if next_state not in allowed and next_state != self._pipeline_state:
+            raise ConstraintViolation(
+                "Invalid pipeline state transition",
+                context={"from": self._pipeline_state, "to": next_state},
+            )
+        self._pipeline_state = next_state
 
     async def _emit_event(
         self,
@@ -1169,13 +1206,24 @@ class AgentOrchestrator:
                 continue
             if pos_str not in strong_set and pos_str not in rhyme_set:
                 continue
+
+            constrained_candidates = [
+                item
+                for item in candidates
+                if isinstance(item, str)
+                and len(item.strip()) == 1
+                and "\u4e00" <= item.strip() <= "\u9fff"
+            ]
+            if not constrained_candidates:
+                continue
+
             try:
                 position = int(pos_str)
             except ValueError:
                 continue
             if position < 0 or position >= len(lyric_chars):
                 continue
-            selection_targets.append((position, candidates))
+            selection_targets.append((position, constrained_candidates))
 
         if not selection_targets:
             return draft_output
