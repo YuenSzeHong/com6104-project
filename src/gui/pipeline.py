@@ -11,6 +11,7 @@ import logging
 import json
 from pathlib import Path
 import asyncio
+import time
 from typing import AsyncGenerator
 
 from .progress import PipelineProgress
@@ -188,6 +189,11 @@ async def run_pipeline_with_progress(
                 )
             )
 
+            last_emit_at = 0.0
+            last_progress_md = ""
+            last_conversation_md = ""
+            last_lyrics_emitted = ""
+
             while not run_task.done() or not event_queue.empty():
                 drained = False
                 while not event_queue.empty():
@@ -227,12 +233,32 @@ async def run_pipeline_with_progress(
                         if isinstance(lyrics_value, str):
                             latest_lyrics = lyrics_value
 
-                if drained:
-                    yield (
-                        progress.format_progress(),
-                        latest_lyrics,
-                        _format_conversation_log(memory),
+                now = time.monotonic()
+                heartbeat_due = (now - last_emit_at) >= 0.8
+                should_emit = drained or heartbeat_due
+
+                if should_emit:
+                    progress_md = progress.format_progress()
+                    conversation_md = _format_conversation_log(memory)
+                    has_delta = (
+                        progress_md != last_progress_md
+                        or conversation_md != last_conversation_md
+                        or latest_lyrics != last_lyrics_emitted
                     )
+
+                    if has_delta or drained:
+                        last_emit_at = now
+                        last_progress_md = progress_md
+                        last_conversation_md = conversation_md
+                        last_lyrics_emitted = latest_lyrics
+
+                        yield (
+                            progress_md,
+                            latest_lyrics,
+                            conversation_md,
+                        )
+                    else:
+                        await asyncio.sleep(0.1)
                 else:
                     await asyncio.sleep(0.1)
 

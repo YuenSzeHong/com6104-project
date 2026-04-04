@@ -54,6 +54,7 @@ from .config import (
     LLM_CONFIG,
     MEMORY_CONFIG,
     PROMPTS_DIR,
+    PROMPTS_AGENTS_DIR,
     PROVIDER,
     WORKFLOW_CONFIG,
 )

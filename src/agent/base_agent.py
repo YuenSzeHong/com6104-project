@@ -311,6 +311,11 @@ class BaseAgent(ABC):
             return await structured_llm.ainvoke(messages)
         except Exception as exc:  # noqa: BLE001
             self._log.warning("结构化输出调用失败，回退到文本解析：%s", exc)
+            # Mirror fallback reason into shared memory so GUI can show live status.
+            self._memory.add_ai_message(
+                f"[结构化输出回退] {type(exc).__name__}: {str(exc)[:240]}",
+                metadata={"agent": self.name, "event": "structured_fallback"},
+            )
             return None
 
     async def _invoke_with_tools(

@@ -40,7 +40,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent.base_agent import BaseAgent, AgentResult
-from agent.config import PROMPTS_AGENTS_DIR
+from agent.config import PROMPTS_AGENTS_DIR, PROVIDER
 from agent.registry import AGENT_REGISTRY
 
 # Lazy import WordSelectorAgent to avoid circular dependency
@@ -226,6 +226,10 @@ class LyricsComposerAgent(BaseAgent):
         # Call the LLM (with tools if available, plain otherwise)
         # ----------------------------------------------------------------
         self._memory.add_user_message(prompt)
+        self._memory.add_ai_message(
+            "[填词代理] 已收到约束，正在生成歌词草稿...",
+            metadata={"agent": self.name, "event": "compose_started"},
+        )
 
         structured = await self._compose_with_schema(
             prompt=prompt,
@@ -286,9 +290,17 @@ class LyricsComposerAgent(BaseAgent):
         tone_sequence: list[int],
     ) -> dict[str, Any]:
         """Try schema-constrained output first, then fall back to legacy parsing."""
-        structured_payload = await self._invoke_llm_structured(
-            schema=LyricsDraftSchema,
-        )
+        structured_payload = None
+        attempted_structured = PROVIDER != "ollama-cloud"
+        if attempted_structured:
+            structured_payload = await self._invoke_llm_structured(
+                schema=LyricsDraftSchema,
+            )
+        else:
+            self._memory.add_ai_message(
+                "[填词代理] ollama-cloud 结构化输出不稳定，直接使用文本生成。",
+                metadata={"agent": self.name, "event": "skip_structured"},
+            )
         if structured_payload is not None:
             payload = (
                 structured_payload.model_dump()
@@ -306,12 +318,23 @@ class LyricsComposerAgent(BaseAgent):
 
             self._log.warning("Structured output missing lyrics, fallback to legacy parsing.")
 
-        if self._tools:
-            # Use tool-calling executor so the LLM can validate Jyutping
-            # candidates via the jyutping MCP server mid-composition
+        # Prefer a plain text generation fallback first because some cloud
+        # providers return fenced JSON that breaks strict structured parsing.
+        # This path is faster and keeps GUI feedback responsive.
+        if attempted_structured:
+            self._memory.add_ai_message(
+                "[填词代理] 结构化输出失败，回退为纯文本生成并做本地解析。",
+                metadata={"agent": self.name, "event": "text_fallback"},
+            )
+        raw_response = await self._invoke_llm()
+
+        # If plain generation is empty, try tool-calling as a last resort.
+        if not str(raw_response).strip() and self._tools:
+            self._memory.add_ai_message(
+                "[填词代理] 纯文本响应为空，回退到工具代理重试。",
+                metadata={"agent": self.name, "event": "tool_fallback"},
+            )
             raw_response = await self._invoke_with_tools(prompt)
-        else:
-            raw_response = await self._invoke_llm()
 
         return self._parse_llm_response(
             raw_response,
