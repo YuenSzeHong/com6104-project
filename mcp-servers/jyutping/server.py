@@ -67,8 +67,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +97,7 @@ _TIMEOUT        = 15.0   # seconds
 _MAX_RETRIES    = 3
 _RETRY_DELAY    = 1.0    # seconds between retries
 _LOCAL_POSTFIX_PATH = Path(__file__).parent / "data" / "postfix_m1_all.json"
+_CACHE_TTL_SECONDS = int(os.getenv("JYUTPING_CACHE_TTL_SECONDS", "600"))
 
 # Matches a complete Jyutping syllable: letters + tone digit 1-6
 # e.g. "sing1", "tau3", "ming4"
@@ -102,6 +105,26 @@ _JP_SYLLABLE_RE = re.compile(r"[a-z]+[1-6]", re.IGNORECASE)
 
 # Matches a purely numeric string (the tone codes returned by the API)
 _NUMERIC_RE = re.compile(r"^\d+$")
+_API_CACHE: dict[str, tuple[float, list[str]]] = {}
+
+
+def _cache_get(query: str) -> list[str] | None:
+    if _CACHE_TTL_SECONDS <= 0:
+        return None
+    item = _API_CACHE.get(query)
+    if item is None:
+        return None
+    expires_at, value = item
+    if time.time() >= expires_at:
+        _API_CACHE.pop(query, None)
+        return None
+    return value
+
+
+def _cache_set(query: str, value: list[str]) -> None:
+    if _CACHE_TTL_SECONDS <= 0:
+        return
+    _API_CACHE[query] = (time.time() + _CACHE_TTL_SECONDS, value)
 
 
 def _load_local_postfix_map() -> dict[str, list[str]]:
@@ -173,6 +196,10 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
     """
 
     async def _single_call(query: str, client: httpx.AsyncClient) -> list[str]:
+        cached = _cache_get(query)
+        if cached is not None:
+            return list(cached)
+
         payload = {"nums": query}
         last_exc = None
         for attempt in range(1, _MAX_RETRIES + 1):
@@ -190,7 +217,9 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
                 data = resp.json()
 
                 if isinstance(data, list):
-                    return [str(item) for item in data if item is not None]
+                    parsed = [str(item) for item in data if item is not None]
+                    _cache_set(query, parsed)
+                    return parsed
 
                 logger.warning("0243.hk 返回非数组响应: %s", type(data).__name__)
                 return []
@@ -226,15 +255,33 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
     if isinstance(nums, (list, tuple)):
         if not nums:
             return []
-        semaphore = asyncio.Semaphore(8)
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            async def _fetch(q: str) -> list[str]:
-                async with semaphore:
-                    return await _single_call(q, client)
+        normalized_queries = [str(q) for q in nums]
+        cached_results: dict[str, list[str]] = {}
+        missing_queries: list[str] = []
+        for query in normalized_queries:
+            cached = _cache_get(query)
+            if cached is not None:
+                cached_results[query] = list(cached)
+            else:
+                missing_queries.append(query)
 
-            tasks = [_fetch(str(q)) for q in nums]
-            results = await asyncio.gather(*tasks)
-        return results
+        fetched_results: dict[str, list[str]] = {}
+        if missing_queries:
+            semaphore = asyncio.Semaphore(8)
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+
+                async def _fetch(q: str) -> tuple[str, list[str]]:
+                    async with semaphore:
+                        return q, await _single_call(q, client)
+
+                tasks = [_fetch(query) for query in missing_queries]
+                fetched_pairs = await asyncio.gather(*tasks)
+            fetched_results = {query: payload for query, payload in fetched_pairs}
+
+        return [
+            fetched_results.get(query, cached_results.get(query, []))
+            for query in normalized_queries
+        ]
 
     # Single path
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

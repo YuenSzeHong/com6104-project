@@ -66,8 +66,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 import statistics
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -95,6 +97,27 @@ logger = logging.getLogger("melody-mapper")
 _API_URL = "https://www.0243.hk/api/cls/"
 _TIMEOUT = 15.0
 _MAX_RETRIES = 3
+_CACHE_TTL_SECONDS = int(os.getenv("MELODY_MAPPER_CACHE_TTL_SECONDS", "600"))
+_API_CACHE: dict[str, tuple[float, list[str]]] = {}
+
+
+def _cache_get(query: str) -> list[str] | None:
+    if _CACHE_TTL_SECONDS <= 0:
+        return None
+    item = _API_CACHE.get(query)
+    if item is None:
+        return None
+    expires_at, value = item
+    if time.time() >= expires_at:
+        _API_CACHE.pop(query, None)
+        return None
+    return value
+
+
+def _cache_set(query: str, value: list[str]) -> None:
+    if _CACHE_TTL_SECONDS <= 0:
+        return
+    _API_CACHE[query] = (time.time() + _CACHE_TTL_SECONDS, value)
 
 
 async def _call_0243_api(nums: str | list[str]) -> list[str] | list[list[str]]:
@@ -104,6 +127,10 @@ async def _call_0243_api(nums: str | list[str]) -> list[str] | list[list[str]]:
     """
 
     async def _single(query: str, client: httpx.AsyncClient) -> list[str]:
+        cached = _cache_get(query)
+        if cached is not None:
+            return list(cached)
+
         payload = {"nums": query}
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
@@ -120,7 +147,9 @@ async def _call_0243_api(nums: str | list[str]) -> list[str] | list[list[str]]:
                 data = resp.json()
 
                 if isinstance(data, list):
-                    return [str(item) for item in data if item is not None]
+                    parsed = [str(item) for item in data if item is not None]
+                    _cache_set(query, parsed)
+                    return parsed
                 return []
 
             except Exception as exc:
@@ -135,16 +164,33 @@ async def _call_0243_api(nums: str | list[str]) -> list[str] | list[list[str]]:
     if isinstance(nums, (list, tuple)):
         if not nums:
             return []
-        semaphore = asyncio.Semaphore(8)
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        normalized_queries = [str(q) for q in nums]
+        cached_results: dict[str, list[str]] = {}
+        missing_queries: list[str] = []
+        for query in normalized_queries:
+            cached = _cache_get(query)
+            if cached is not None:
+                cached_results[query] = list(cached)
+            else:
+                missing_queries.append(query)
 
-            async def _fetch(q: str) -> list[str]:
-                async with semaphore:
-                    return await _single(q, client)
+        fetched_results: dict[str, list[str]] = {}
+        if missing_queries:
+            semaphore = asyncio.Semaphore(8)
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
 
-            tasks = [_fetch(str(q)) for q in nums]
-            results = await asyncio.gather(*tasks)
-        return results
+                async def _fetch(q: str) -> tuple[str, list[str]]:
+                    async with semaphore:
+                        return q, await _single(q, client)
+
+                tasks = [_fetch(query) for query in missing_queries]
+                fetched_pairs = await asyncio.gather(*tasks)
+            fetched_results = {query: payload for query, payload in fetched_pairs}
+
+        return [
+            fetched_results.get(query, cached_results.get(query, []))
+            for query in normalized_queries
+        ]
 
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         return await _single(str(nums), client)
