@@ -37,6 +37,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agent.base_agent import BaseAgent, AgentResult
 from agent.config import PROMPTS_AGENTS_DIR
 from agent.registry import AGENT_REGISTRY
@@ -56,6 +58,25 @@ def _get_word_selector_class():
 
 
 logger = logging.getLogger(__name__)
+
+
+class LyricsLineSchema(BaseModel):
+    """Structured line-level output schema for lyric drafts."""
+
+    text: str = Field(default="", description="中文歌词行")
+    jyutping: str = Field(default="", description="对应粤拼行")
+    syllable_count: int = Field(default=0, ge=0, description="该行音节数")
+
+
+class LyricsDraftSchema(BaseModel):
+    """Structured output schema for the composer agent."""
+
+    lyrics: str = Field(default="", description="完整歌词（可含换行）")
+    jyutping: str = Field(default="", description="完整歌词对应粤拼")
+    lines: list[LyricsLineSchema] = Field(default_factory=list, description="逐行歌词与粤拼")
+    rhyme_scheme: str = Field(default="", description="押韵方案")
+    changes_made: str = Field(default="", description="本轮修改说明")
+    notes: str = Field(default="", description="补充备注")
 
 
 # ---------------------------------------------------------------------------
@@ -206,18 +227,8 @@ class LyricsComposerAgent(BaseAgent):
         # ----------------------------------------------------------------
         self._memory.add_user_message(prompt)
 
-        if self._tools:
-            # Use tool-calling executor so the LLM can validate Jyutping
-            # candidates via the jyutping MCP server mid-composition
-            raw_response = await self._invoke_with_tools(prompt)
-        else:
-            raw_response = await self._invoke_llm()
-
-        # ----------------------------------------------------------------
-        # Parse the LLM response
-        # ----------------------------------------------------------------
-        structured = self._parse_llm_response(
-            raw_response,
+        structured = await self._compose_with_schema(
+            prompt=prompt,
             syllable_count=syllable_count,
             tone_sequence=melody_tone_sequence,
         )
@@ -267,6 +278,88 @@ class LyricsComposerAgent(BaseAgent):
                 "self_check": self_check,
             },
         )
+
+    async def _compose_with_schema(
+        self,
+        prompt: str,
+        syllable_count: int,
+        tone_sequence: list[int],
+    ) -> dict[str, Any]:
+        """Try schema-constrained output first, then fall back to legacy parsing."""
+        structured_payload = await self._invoke_llm_structured(
+            schema=LyricsDraftSchema,
+        )
+        if structured_payload is not None:
+            payload = (
+                structured_payload.model_dump()
+                if hasattr(structured_payload, "model_dump")
+                else dict(structured_payload)
+                if isinstance(structured_payload, dict)
+                else {}
+            )
+            normalized = self._normalize_structured_payload(payload)
+            if normalized.get("lyrics"):
+                return {
+                    **normalized,
+                    "target_syllable_count": syllable_count,
+                }
+
+            self._log.warning("Structured output missing lyrics, fallback to legacy parsing.")
+
+        if self._tools:
+            # Use tool-calling executor so the LLM can validate Jyutping
+            # candidates via the jyutping MCP server mid-composition
+            raw_response = await self._invoke_with_tools(prompt)
+        else:
+            raw_response = await self._invoke_llm()
+
+        return self._parse_llm_response(
+            raw_response,
+            syllable_count=syllable_count,
+            tone_sequence=tone_sequence,
+        )
+
+    def _normalize_structured_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Normalize schema payload into the same shape expected by downstream logic."""
+        lyrics = str(payload.get("lyrics", "")).strip()
+        jyutping = str(payload.get("jyutping", "")).strip()
+
+        lines_raw = payload.get("lines", [])
+        lines: list[dict[str, Any]] = []
+        if isinstance(lines_raw, list):
+            for item in lines_raw:
+                if not isinstance(item, dict):
+                    continue
+                line_text = str(item.get("text", "")).strip()
+                line_jp = str(item.get("jyutping", "")).strip()
+                line_syllable_count = item.get("syllable_count", 0)
+                if not isinstance(line_syllable_count, int):
+                    line_syllable_count = 0
+                lines.append(
+                    {
+                        "text": line_text,
+                        "jyutping": line_jp,
+                        "syllable_count": max(0, line_syllable_count),
+                    }
+                )
+
+        if lyrics and not lines:
+            lines = self._split_lyrics_to_lines(lyrics, jyutping)
+
+        for line in lines:
+            if not line.get("syllable_count"):
+                line["syllable_count"] = len(
+                    re.findall(r"[a-z]+[1-6]", str(line.get("jyutping", "")), re.I)
+                )
+
+        return {
+            "lyrics": lyrics,
+            "jyutping": jyutping,
+            "lines": lines,
+            "rhyme_scheme": str(payload.get("rhyme_scheme", "")),
+            "changes_made": str(payload.get("changes_made", "")),
+            "notes": str(payload.get("notes", "")),
+        }
 
     # ------------------------------------------------------------------
     # Prompt builders

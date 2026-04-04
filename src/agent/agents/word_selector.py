@@ -30,11 +30,30 @@ import re
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agent.base_agent import BaseAgent, AgentResult
 from agent.config import PROMPTS_AGENTS_DIR
 from agent.registry import AGENT_REGISTRY
 
 logger = logging.getLogger(__name__)
+
+
+class WordSelectionSchema(BaseModel):
+    """Structured output schema for word selection."""
+
+    word: str = Field(default="", description="选中的词，必须来自候选词列表")
+    reason: str = Field(default="", description="选择该词的简短理由")
+    alternatives: list[str] = Field(
+        default_factory=list,
+        description="备选词列表（最多 3 个）",
+    )
+    confidence: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="选择置信度，范围 0.0-1.0",
+    )
 
 
 @AGENT_REGISTRY.register("word-selector")
@@ -104,10 +123,7 @@ class WordSelectorAgent(BaseAgent):
 
         # 调用 LLM
         self._memory.add_user_message(prompt)
-        raw_response = await self._invoke_llm()
-
-        # 解析结果
-        selected = self._parse_response(raw_response, candidates)
+        selected = await self._select_with_schema(prompt, candidates)
 
         self._log.info(
             "选字完成 | 选中=%s | 理由=%s",
@@ -126,6 +142,32 @@ class WordSelectorAgent(BaseAgent):
                 "alternatives": selected.get("alternatives", []),
             },
         )
+
+    async def _select_with_schema(
+        self,
+        prompt: str,
+        candidates: list[str],
+    ) -> dict[str, Any]:
+        """
+        Prefer schema-constrained output; fall back to legacy text parsing.
+        """
+        structured = await self._invoke_llm_structured(
+            schema=WordSelectionSchema,
+            extra_user_message=prompt,
+        )
+
+        if structured is not None:
+            parsed = (
+                structured.model_dump()
+                if hasattr(structured, "model_dump")
+                else dict(structured)
+                if isinstance(structured, dict)
+                else {}
+            )
+            return self._normalize_selection(parsed, candidates)
+
+        raw_response = await self._invoke_llm(extra_user_message=prompt)
+        return self._parse_response(raw_response, candidates)
 
     def _build_selection_prompt(
         self,
@@ -206,11 +248,47 @@ class WordSelectorAgent(BaseAgent):
                 )
                 selected_word = candidates[0] if candidates else ""
 
+        parsed["word"] = selected_word
+        return self._normalize_selection(parsed, candidates)
+
+    def _normalize_selection(
+        self,
+        parsed: dict[str, Any],
+        candidates: list[str],
+    ) -> dict[str, Any]:
+        """Normalize and validate selection payload to a stable shape."""
+        selected_word = str(parsed.get("word", "")).strip()
+        if selected_word and selected_word not in candidates:
+            for candidate in candidates:
+                if candidate.strip() == selected_word:
+                    selected_word = candidate
+                    break
+            else:
+                self._log.warning(
+                    "选中的词不在候选列表中：%r，使用第一个候选",
+                    selected_word,
+                )
+                selected_word = candidates[0] if candidates else ""
+
+        alternatives_raw = parsed.get("alternatives", [])
+        alternatives = (
+            [str(item) for item in alternatives_raw if str(item).strip()][:3]
+            if isinstance(alternatives_raw, list)
+            else []
+        )
+
+        confidence_raw = parsed.get("confidence", 0.8)
+        try:
+            confidence = float(confidence_raw)
+        except (TypeError, ValueError):
+            confidence = 0.8
+        confidence = max(0.0, min(1.0, confidence))
+
         return {
             "word": selected_word,
-            "reason": parsed.get("reason", "未提供理由"),
-            "alternatives": parsed.get("alternatives", [])[:3],
-            "confidence": parsed.get("confidence", 0.8),
+            "reason": str(parsed.get("reason", "未提供理由")),
+            "alternatives": alternatives,
+            "confidence": confidence,
         }
 
     @staticmethod

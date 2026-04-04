@@ -47,10 +47,24 @@ import logging
 import re
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agent.base_agent import BaseAgent, AgentResult
 from agent.registry import AGENT_REGISTRY
 
 logger = logging.getLogger(__name__)
+
+
+class ArtisticScoreSchema(BaseModel):
+    """Structured output schema for validator artistic-quality scoring."""
+
+    score: float = Field(
+        default=5.0,
+        ge=0.0,
+        le=10.0,
+        description="艺术质量评分，范围 0-10",
+    )
+    reasoning: str = Field(default="", description="简短评分理由")
 
 
 # ---------------------------------------------------------------------------
@@ -552,6 +566,21 @@ Do not include any other text.
 """.strip()
 
         try:
+            structured = await self._invoke_llm_structured(
+                schema=ArtisticScoreSchema,
+                extra_user_message=prompt,
+            )
+            if structured is not None:
+                payload = (
+                    structured.model_dump()
+                    if hasattr(structured, "model_dump")
+                    else dict(structured)
+                    if isinstance(structured, dict)
+                    else {}
+                )
+                raw_score = float(payload.get("score", 5.0))
+                return round(min(max(raw_score / 10.0, 0.0), 1.0), 4)
+
             raw = await self._invoke_llm(extra_user_message=prompt)
             json_str = self._extract_json_from_text(raw)
             if json_str:

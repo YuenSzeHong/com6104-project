@@ -282,6 +282,37 @@ class BaseAgent(ABC):
         response: AIMessage = await self._llm.ainvoke(messages)
         return str(response.content)
 
+    async def _invoke_llm_structured(
+        self,
+        schema: type[Any],
+        messages: list[BaseMessage] | None = None,
+        extra_user_message: str | None = None,
+    ) -> Any | None:
+        """
+        Call the LLM with schema-constrained output when supported.
+
+        Returns
+        -------
+        Parsed structured payload (usually a Pydantic model instance or dict),
+        or None if structured output is not supported / failed.
+        """
+        if messages is None:
+            messages = self._memory.get_messages()
+
+        if extra_user_message:
+            messages = list(messages) + [HumanMessage(content=extra_user_message)]
+
+        if not hasattr(self._llm, "with_structured_output"):
+            self._log.debug("当前模型不支持 with_structured_output，回退到文本解析")
+            return None
+
+        try:
+            structured_llm = self._llm.with_structured_output(schema)
+            return await structured_llm.ainvoke(messages)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("结构化输出调用失败，回退到文本解析：%s", exc)
+            return None
+
     async def _invoke_with_tools(
         self,
         task: str,
