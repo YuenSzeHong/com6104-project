@@ -150,6 +150,12 @@ class AgentOrchestrator:
         self._agents: dict[str, Any] = {}
         self._started: bool = False
 
+        # Concurrency control: limits parallel LLM requests to avoid GPU thrashing
+        # Based on stress test: concurrency > 1 causes significant degradation (34%)
+        self._llm_semaphore: asyncio.Semaphore = asyncio.Semaphore(
+            int(os.getenv("LLM_MAX_CONCURRENT_REQUESTS", "1"))
+        )
+
         self._max_revision_loops: int = WORKFLOW_CONFIG["max_revision_loops"]
         self._min_quality_score: float = WORKFLOW_CONFIG["min_quality_score"]
         self._word_selector_threshold: int = int(
@@ -1150,43 +1156,46 @@ class AgentOrchestrator:
         与旧版 _run_stage 的区别：
         - 仅用于真正的 LLM 代理（lyrics-composer、validator）
         - 计算性步骤已由 _call_tool_direct 直接处理
+        - 使用信号量限制并发 LLM 请求，防止 GPU 过载
         """
         if agent_name not in self._agents:
             logger.error("代理 '%s' 不存在。可用：%s", agent_name, list(self._agents))
             return {}
 
         agent = self._agents[agent_name]
-        logger.info(">>> LLM 代理：%s", agent_name)
+        logger.info(">>> LLM 代理：%s（等待许可）", agent_name)
 
-        try:
-            agent_result = await agent.run(task, **kwargs)
-            if not getattr(agent_result, "success", False):
-                logger.warning(
-                    "LLM 代理 '%s' 执行失败：%s",
-                    agent_name,
-                    getattr(agent_result, "error", "unknown error"),
-                )
-                self._memory.add_ai_message(
-                    f"[{agent_name}] 执行失败：{getattr(agent_result, 'error', 'unknown error')}"
-                )
-                return {"error": getattr(agent_result, "error", "agent failed")}
+        async with self._llm_semaphore:
+            logger.info(">>> LLM 代理：%s 开始执行", agent_name)
+            try:
+                agent_result = await agent.run(task, **kwargs)
+                if not getattr(agent_result, "success", False):
+                    logger.warning(
+                        "LLM 代理 '%s' 执行失败：%s",
+                        agent_name,
+                        getattr(agent_result, "error", "unknown error"),
+                    )
+                    self._memory.add_ai_message(
+                        f"[{agent_name}] 执行失败：{getattr(agent_result, 'error', 'unknown error')}"
+                    )
+                    return {"error": getattr(agent_result, "error", "agent failed")}
 
-            data: dict[str, Any] = (
-                agent_result.data if hasattr(agent_result, "data") else {}
-            )
-            payload = data.get(context_key, data)
-            if context_key == "draft_lyrics" and isinstance(payload, dict):
-                self._memory.set_current_draft(payload)
-            elif context_key == "validation_result" and isinstance(payload, dict):
-                self._memory.set_validation_result(payload)
-            else:
-                self._memory.set_pipeline_value(context_key, payload)
-            logger.info("<<< LLM 代理 '%s' 完成", agent_name)
-            return payload
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("LLM 代理 '%s' 失败: %s", agent_name, exc)
-            self._memory.add_ai_message(f"[{agent_name}] 错误：{exc}")
-            return {"error": str(exc)}
+                data: dict[str, Any] = (
+                    agent_result.data if hasattr(agent_result, "data") else {}
+                )
+                payload = data.get(context_key, data)
+                if context_key == "draft_lyrics" and isinstance(payload, dict):
+                    self._memory.set_current_draft(payload)
+                elif context_key == "validation_result" and isinstance(payload, dict):
+                    self._memory.set_validation_result(payload)
+                else:
+                    self._memory.set_pipeline_value(context_key, payload)
+                logger.info("<<< LLM 代理 '%s' 完成", agent_name)
+                return payload
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("LLM 代理 '%s' 失败: %s", agent_name, exc)
+                self._memory.add_ai_message(f"[{agent_name}] 错误：{exc}")
+                return {"error": str(exc)}
 
     async def _run_word_selector_isolated(
         self,
