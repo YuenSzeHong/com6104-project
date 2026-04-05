@@ -31,6 +31,7 @@ Context keys written
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -39,8 +40,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agent.base_agent import BaseAgent, AgentResult
+from agent.base_agent import BaseAgent, AgentResult, STRUCTURED_OUTPUT_SKIPPED
 from agent.config import PROMPTS_AGENTS_DIR, PROVIDER
+from agent.memory import ShortTermMemory
 from agent.registry import AGENT_REGISTRY
 
 # Lazy import WordSelectorAgent to avoid circular dependency
@@ -290,17 +292,13 @@ class LyricsComposerAgent(BaseAgent):
         tone_sequence: list[int],
     ) -> dict[str, Any]:
         """Try schema-constrained output first, then fall back to legacy parsing."""
-        structured_payload = None
-        attempted_structured = PROVIDER != "ollama-cloud"
-        if attempted_structured:
-            structured_payload = await self._invoke_llm_structured(
-                schema=LyricsDraftSchema,
-            )
-        else:
-            self._memory.add_ai_message(
-                "[填词代理] ollama-cloud 结构化输出不稳定，直接使用文本生成。",
-                metadata={"agent": self.name, "event": "skip_structured"},
-            )
+        structured_payload = await self._invoke_llm_structured(
+            schema=LyricsDraftSchema,
+        )
+        structured_skipped = structured_payload is STRUCTURED_OUTPUT_SKIPPED
+        if structured_skipped:
+            structured_payload = None
+
         if structured_payload is not None:
             payload = (
                 structured_payload.model_dump()
@@ -321,20 +319,43 @@ class LyricsComposerAgent(BaseAgent):
         # Prefer a plain text generation fallback first because some cloud
         # providers return fenced JSON that breaks strict structured parsing.
         # This path is faster and keeps GUI feedback responsive.
-        if attempted_structured:
+        if not structured_skipped:
             self._memory.add_ai_message(
                 "[填词代理] 结构化输出失败，回退为纯文本生成并做本地解析。",
                 metadata={"agent": self.name, "event": "text_fallback"},
             )
         raw_response = await self._invoke_llm()
 
-        # If plain generation is empty, try tool-calling as a last resort.
-        if not str(raw_response).strip() and self._tools:
+        # If plain generation is empty, retry once with a compact instruction.
+        if not str(raw_response).strip():
             self._memory.add_ai_message(
-                "[填词代理] 纯文本响应为空，回退到工具代理重试。",
+                "[填词代理] 首次文本响应为空，使用精简提示重试一次。",
+                metadata={"agent": self.name, "event": "plain_retry"},
+            )
+            retry_prompt = (
+                "仅输出 JSON 对象，必须包含 lyrics、jyutping、lines。"
+                "不要解释，不要代码块。"
+            )
+            raw_response = await self._invoke_llm(extra_user_message=retry_prompt)
+
+        # Only non-cloud providers use tool fallback as last resort.
+        if not str(raw_response).strip() and self._tools and PROVIDER != "ollama-cloud":
+            self._memory.add_ai_message(
+                "[填词代理] 纯文本仍为空，回退到工具代理重试。",
                 metadata={"agent": self.name, "event": "tool_fallback"},
             )
-            raw_response = await self._invoke_with_tools(prompt)
+            fallback_task = (
+                "请基于已有上下文直接输出一版符合约束的粤语歌词 JSON。"
+                "不要复述长篇说明，只输出结果。"
+            )
+            try:
+                raw_response = await self._invoke_with_tools(fallback_task)
+            except Exception as exc:  # noqa: BLE001
+                self._log.warning("Tool fallback failed: %s", exc)
+                self._memory.add_ai_message(
+                    f"[填词代理] 工具回退失败：{exc}",
+                    metadata={"agent": self.name, "event": "tool_fallback_failed"},
+                )
 
         return self._parse_llm_response(
             raw_response,
@@ -365,6 +386,19 @@ class LyricsComposerAgent(BaseAgent):
                         "syllable_count": max(0, line_syllable_count),
                     }
                 )
+
+        if not lyrics and lines:
+            lyrics = "\n".join(
+                str(line.get("text", "")).strip()
+                for line in lines
+                if str(line.get("text", "")).strip()
+            )
+        if not jyutping and lines:
+            jyutping = "\n".join(
+                str(line.get("jyutping", "")).strip()
+                for line in lines
+                if str(line.get("jyutping", "")).strip()
+            )
 
         if lyrics and not lines:
             lines = self._split_lyrics_to_lines(lyrics, jyutping)
@@ -447,14 +481,18 @@ class LyricsComposerAgent(BaseAgent):
             key=key,
             strong_str=strong_str,
             rhyme_str=rhyme_str,
-            reference_text=reference_text or "(not provided)",
-            embedded_source=embedded_source,
+            reference_text=self._truncate_prompt_text(
+                reference_text or "(not provided)", 220
+            ),
+            embedded_source=self._truncate_prompt_text(embedded_source, 120),
             embedded_count=embedded_count,
             effective_count_source=effective_count_source,
-            embedded_str=embedded_str,
-            selected_jp=selected_jp or "(not available)",
-            breakdown_str=breakdown_str,
-            tone_seq_str=tone_seq_str,
+            embedded_str=self._truncate_prompt_text(embedded_str, 140),
+            selected_jp=self._truncate_prompt_text(
+                selected_jp or "(not available)", 140
+            ),
+            breakdown_str=self._truncate_prompt_text(breakdown_str, 220),
+            tone_seq_str=self._truncate_prompt_text(tone_seq_str, 260),
         )
 
     def _build_revision_prompt(
@@ -501,21 +539,35 @@ class LyricsComposerAgent(BaseAgent):
             "lyrics-composer-revision-task.md",
             attempt_label=attempt_label,
             score=score,
-            prev_lyrics=prev_lyrics,
-            prev_jyutping=prev_jyutping or "(not available)",
-            feedback=feedback or "(no detailed feedback provided)",
-            corrections_str=corrections_str,
+            prev_lyrics=self._truncate_prompt_text(prev_lyrics, 220),
+            prev_jyutping=self._truncate_prompt_text(
+                prev_jyutping or "(not available)", 180
+            ),
+            feedback=self._truncate_prompt_text(
+                feedback or "(no detailed feedback provided)", 260
+            ),
+            corrections_str=self._truncate_prompt_text(corrections_str, 260),
             syllable_count=syllable_count,
             strong_str=", ".join(str(b) for b in strong_beats) or "unknown",
             rhyme_str=", ".join(str(r) for r in rhyme_positions) or "phrase endings",
-            reference_text=reference_text or "(not provided)",
-            tone_seq_str=tone_seq_str,
+            reference_text=self._truncate_prompt_text(
+                reference_text or "(not provided)", 220
+            ),
+            tone_seq_str=self._truncate_prompt_text(tone_seq_str, 260),
         )
 
     @staticmethod
     def _render_prompt_template(template_name: str, **kwargs: Any) -> str:
         template_path: Path = PROMPTS_AGENTS_DIR / template_name
         return template_path.read_text(encoding="utf-8").format(**kwargs).strip()
+
+    @staticmethod
+    def _truncate_prompt_text(text: str, max_chars: int) -> str:
+        """Trim prompt fragments so the composed prompt stays within context."""
+        cleaned = str(text).strip()
+        if len(cleaned) <= max_chars:
+            return cleaned
+        return cleaned[: max(0, max_chars - 1)].rstrip() + "…"
 
     # ------------------------------------------------------------------
     # Response parser
@@ -558,7 +610,27 @@ class LyricsComposerAgent(BaseAgent):
         # 2. Normalise / fill missing fields
         lyrics: str = parsed.get("lyrics", "").strip()
         jyutping: str = parsed.get("jyutping", "").strip()
-        lines: list[dict] = parsed.get("lines", [])
+        lines_raw = parsed.get("lines", [])
+        lines: list[dict[str, Any]] = []
+        if isinstance(lines_raw, list):
+            for item in lines_raw:
+                if isinstance(item, dict):
+                    lines.append(
+                        {
+                            "text": str(item.get("text", "")).strip(),
+                            "jyutping": str(item.get("jyutping", "")).strip(),
+                            "syllable_count": int(item.get("syllable_count", 0) or 0),
+                        }
+                    )
+                elif isinstance(item, str) and item.strip():
+                    lines.append(
+                        {"text": item.strip(), "jyutping": "", "syllable_count": 0}
+                    )
+
+        if not lyrics and lines:
+            lyrics = "\n".join(line["text"] for line in lines if line["text"])
+        if not jyutping and lines:
+            jyutping = "\n".join(line["jyutping"] for line in lines if line["jyutping"])
 
         # If lines list is empty but lyrics is populated, split by newline
         if lyrics and not lines:
@@ -734,6 +806,40 @@ class LyricsComposerAgent(BaseAgent):
             })
         return result
 
+    async def _select_word_for_position(
+        self,
+        position: int,
+        candidates: list[str],
+        lyrics_text: str,
+        melody_tone_sequence: list[int],
+        rhyme_positions: list[int],
+        reference_text: str,
+    ) -> tuple[int, str, dict[str, Any]]:
+        """Run a single selection against an isolated memory snapshot."""
+        WordSelectorAgent = _get_word_selector_class()
+        selector = WordSelectorAgent(
+            config=self.config,
+            llm=self.llm,
+            memory=ShortTermMemory.from_dict(self._memory.to_dict()),
+            tools=[],
+        )
+        context = self._build_word_selection_context(
+            position=position,
+            lyrics_text=lyrics_text,
+            melody_tone=melody_tone_sequence[position]
+            if position < len(melody_tone_sequence)
+            else None,
+            is_rhyme_position=position in rhyme_positions,
+            reference_text=reference_text,
+        )
+        result = await selector.run(
+            task=f"为歌词位置 {position} 选择最合适的词语",
+            candidates=candidates,
+            context=context,
+            count=1,
+        )
+        return position, str(result.output or ""), dict(result.metadata or {})
+
     # ------------------------------------------------------------------
     # Word selection refinement
     # ------------------------------------------------------------------
@@ -770,12 +876,11 @@ class LyricsComposerAgent(BaseAgent):
         dict
             Updated structured lyrics with refined word selections
         """
-        WordSelectorAgent = _get_word_selector_class()
-
         lyrics_text = structured.get("lyrics", "")
 
         # Extract current lyrics as a list of characters/words for easy modification
         lyrics_chars = list(lyrics_text.replace("\n", ""))
+        selection_tasks: list[Any] = []
 
         # Threshold for invoking word selector
         CANDIDATE_THRESHOLD = 10
@@ -797,43 +902,40 @@ class LyricsComposerAgent(BaseAgent):
             if position >= len(lyrics_chars):
                 continue  # Position out of bounds
 
-            # Build selection context
-            context = self._build_word_selection_context(
-                position=position,
-                lyrics_text=lyrics_text,
-                melody_tone=melody_tone_sequence[position]
-                if position < len(melody_tone_sequence)
-                else None,
-                is_rhyme_position=position in rhyme_positions,
-                reference_text=reference_text,
-            )
-
-            # Invoke WordSelectorAgent
-            selector = WordSelectorAgent(
-                config=self.config,
-                llm=self.llm,
-                memory=self.memory,
-                tools=[],  # Word selector doesn't need tools
-            )
-
-            result = await selector.run(
-                task=f"为歌词位置 {position} 选择最合适的词语",
-                candidates=candidates,
-                context=context,
-                count=1,
-            )
-
-            selected_word = result.output
-            if selected_word and len(selected_word) == 1:
-                # Replace the character at this position
-                lyrics_chars[position] = selected_word
-                self._log.info(
-                    "Position %d: selected '%s' from %d candidates | reason=%s",
-                    position,
-                    selected_word,
-                    len(candidates),
-                    result.metadata.get("selection_reason", "?")[:60],
+            selection_tasks.append(
+                self._select_word_for_position(
+                    position=position,
+                    candidates=candidates,
+                    lyrics_text=lyrics_text,
+                    melody_tone_sequence=melody_tone_sequence,
+                    rhyme_positions=rhyme_positions,
+                    reference_text=reference_text,
                 )
+            )
+
+        if selection_tasks:
+            selection_results = await asyncio.gather(
+                *selection_tasks,
+                return_exceptions=True,
+            )
+
+            for item in selection_results:
+                if isinstance(item, BaseException):
+                    self._log.warning("Word selection failed: %s", item)
+                    continue
+
+                if not isinstance(item, tuple) or len(item) != 3:
+                    continue
+
+                position, selected_word, metadata = item
+                if selected_word and len(selected_word) == 1:
+                    lyrics_chars[position] = selected_word
+                    self._log.info(
+                        "Position %d: selected '%s' | reason=%s",
+                        position,
+                        selected_word,
+                        str(metadata.get("selection_reason", "?"))[:60],
+                    )
 
         # Reconstruct lyrics with selected words
         "".join(lyrics_chars)

@@ -1,11 +1,4 @@
 """
-AgentOrchestrator – the central coordinator of the multi-agent workflow.
-
-Responsibilities
-----------------
-1. Start all enabled MCP servers via langchain-mcp-adapters MultiServerMCPClient.
-2. Load ALL tools with get_tools() (the only supported call), then filter each
-   agent's tool-set by the tool_names declared in its MCPServerConfig.
 3. Build the LLM from whichever provider is selected (Ollama or LM Studio).
 4. Instantiate every agent defined in config.AGENTS with the correct LLM,
    memory, and filtered tool-set.
@@ -99,21 +92,21 @@ class PipelineResult:
 
     lyrics: str = ""
 
-    midi_analysis:     dict[str, Any] = field(default_factory=dict)
-    jyutping_map:      dict[str, Any] = field(default_factory=dict)
-    draft_history:     list[str]      = field(default_factory=list)
-    validator_scores:  list[float]    = field(default_factory=list)
-    validator_feedback: list[str]     = field(default_factory=list)
+    midi_analysis: dict[str, Any] = field(default_factory=dict)
+    jyutping_map: dict[str, Any] = field(default_factory=dict)
+    draft_history: list[str] = field(default_factory=list)
+    validator_scores: list[float] = field(default_factory=list)
+    validator_feedback: list[str] = field(default_factory=list)
 
-    revision_count:   int   = 0
-    accepted:         bool  = False
-    elapsed_seconds:  float = 0.0
-    session_id:       str   = ""
-    error:            str | None = None
+    revision_count: int = 0
+    accepted: bool = False
+    elapsed_seconds: float = 0.0
+    session_id: str = ""
+    error: str | None = None
 
     def __str__(self) -> str:  # pragma: no cover
         status = "✓ 已接受" if self.accepted else "✗ 未通过验收"
-        score  = f"{self.validator_scores[-1]:.2f}" if self.validator_scores else "N/A"
+        score = f"{self.validator_scores[-1]:.2f}" if self.validator_scores else "N/A"
         return (
             f"PipelineResult [{status}] "
             f"revisions={self.revision_count} score={score} "
@@ -150,17 +143,35 @@ class AgentOrchestrator:
         *,
         session_id: str | None = None,
     ) -> None:
-        self._llm:    BaseChatModel   = llm    or self._build_llm()
+        self._llm: BaseChatModel = llm or self._build_llm()
         self._memory: ShortTermMemory = memory or self._build_memory(session_id)
 
         self._mcp_client: MultiServerMCPClient | None = None
-        self._agents:     dict[str, Any]              = {}
-        self._started:    bool                        = False
+        self._agents: dict[str, Any] = {}
+        self._started: bool = False
 
-        self._max_revision_loops: int   = WORKFLOW_CONFIG["max_revision_loops"]
-        self._min_quality_score:  float = WORKFLOW_CONFIG["min_quality_score"]
+        self._max_revision_loops: int = WORKFLOW_CONFIG["max_revision_loops"]
+        self._min_quality_score: float = WORKFLOW_CONFIG["min_quality_score"]
         self._word_selector_threshold: int = int(
             os.getenv("WORD_SELECTOR_THRESHOLD", "10")
+        )
+        self._phrase_selector_max_len: int = int(
+            os.getenv("WORD_SELECTOR_PHRASE_MAX_LEN", "3")
+        )
+        self._word_selector_fast_mode: str = (
+            os.getenv("WORD_SELECTOR_FAST_MODE", "auto").strip().lower()
+        )
+        self._word_selector_max_llm_calls: int = max(
+            1,
+            int(os.getenv("WORD_SELECTOR_MAX_LLM_CALLS", "3")),
+        )
+        self._word_selector_max_targets: int = max(
+            1,
+            int(os.getenv("WORD_SELECTOR_MAX_TARGETS", "8")),
+        )
+        self._word_selector_call_timeout_s: float = max(
+            1.0,
+            float(os.getenv("WORD_SELECTOR_CALL_TIMEOUT_S", "12")),
         )
         self._pipeline_state: str = _STATE_STARTING
         self._workflow_graph = build_workflow_graph()
@@ -270,7 +281,7 @@ class AgentOrchestrator:
                 "请先调用 start() 或使用 'async with AgentOrchestrator() as orch'"
             )
 
-        t0     = time.perf_counter()
+        t0 = time.perf_counter()
         result = PipelineResult(session_id=self._memory.session_id)
         self._pipeline_state = _STATE_STARTING
 
@@ -285,6 +296,7 @@ class AgentOrchestrator:
         )
 
         self._memory.set_artifact("source_text", reference_text)
+        self._memory.set_pipeline_value("current_midi_path", str(midi_path))
         self._memory.set_run_status(
             stage="starting",
             accepted=False,
@@ -335,12 +347,16 @@ class AgentOrchestrator:
 
             # 等待所有任务完成
             midi_analysis, durations, rhyme_positions_raw = await asyncio.gather(
-                midi_task, durations_task, rhyme_task,
+                midi_task,
+                durations_task,
+                rhyme_task,
                 return_exceptions=True,
             )
 
             # 处理结果
-            result.midi_analysis = midi_analysis if isinstance(midi_analysis, dict) else {}
+            result.midi_analysis = (
+                midi_analysis if isinstance(midi_analysis, dict) else {}
+            )
             result.midi_analysis["syllable_durations"] = (
                 durations if isinstance(durations, list) else []
             )
@@ -353,7 +369,9 @@ class AgentOrchestrator:
                 result.midi_analysis.get("effective_syllable_count", 0)
                 or result.midi_analysis.get("syllable_count", 0)
             )
-            strong_beats: list[int] = result.midi_analysis.get("strong_beat_positions", [])
+            strong_beats: list[int] = result.midi_analysis.get(
+                "strong_beat_positions", []
+            )
 
             self._memory.set_pipeline_value("midi_analysis", result.midi_analysis)
             logger.info(
@@ -424,8 +442,16 @@ class AgentOrchestrator:
             )
 
             # 等待所有任务完成
-            melody_analysis_raw, jp_candidates_raw, tone_pattern_raw, tone_codes_raw = await asyncio.gather(
-                melody_task, jp_task, tone_pattern_task, tone_codes_task,
+            (
+                melody_analysis_raw,
+                jp_candidates_raw,
+                tone_pattern_raw,
+                tone_codes_raw,
+            ) = await asyncio.gather(
+                melody_task,
+                jp_task,
+                tone_pattern_task,
+                tone_codes_task,
                 return_exceptions=True,
             )
 
@@ -434,7 +460,8 @@ class AgentOrchestrator:
                 melody_analysis_raw if isinstance(melody_analysis_raw, dict) else {}
             )
             melody_tone_sequence: list[int] = [
-                int(t) for t in melody_analysis.get("tone_sequence", [])
+                int(t)
+                for t in melody_analysis.get("tone_sequence", [])
                 if isinstance(t, int | float | str) and str(t).isdigit()
             ]
             jp_candidates: list[str] = (
@@ -469,8 +496,12 @@ class AgentOrchestrator:
 
             # Gather all positions that need candidate words
             positions_needing_candidates = set()
-            positions_needing_candidates.update(str(p) for p in strong_beats[:16])  # First 16 strong beats
-            positions_needing_candidates.update(str(p) for p in rhyme_positions[:8])  # First 8 rhyme positions
+            positions_needing_candidates.update(
+                str(p) for p in strong_beats[:16]
+            )  # First 16 strong beats
+            positions_needing_candidates.update(
+                str(p) for p in rhyme_positions[:8]
+            )  # First 8 rhyme positions
 
             # Map position -> tone code
             position_tone_map: dict[str, str] = {}
@@ -478,7 +509,8 @@ class AgentOrchestrator:
                 pos = int(pos_str)
                 beat_tone = (
                     str(melody_tone_sequence[pos])
-                    if pos < len(melody_tone_sequence) else "4"
+                    if pos < len(melody_tone_sequence)
+                    else "4"
                 )
                 position_tone_map[pos_str] = beat_tone
 
@@ -497,8 +529,9 @@ class AgentOrchestrator:
 
                 # Parse batch results: returns list of lists [[words_for_code1], [words_for_code2], ...]
                 batch_candidates: list[list[str]] = (
-                    batch_candidates_raw if isinstance(batch_candidates_raw, list) and
-                    all(isinstance(item, list) for item in batch_candidates_raw)
+                    batch_candidates_raw
+                    if isinstance(batch_candidates_raw, list)
+                    and all(isinstance(item, list) for item in batch_candidates_raw)
                     else []
                 )
 
@@ -506,12 +539,16 @@ class AgentOrchestrator:
                 tone_to_candidates: dict[str, list[str]] = {}
                 for i, tone_code in enumerate(unique_tone_codes):
                     if i < len(batch_candidates):
-                        tone_to_candidates[tone_code] = batch_candidates[i][:15]  # Keep top 15 per tone
+                        tone_to_candidates[tone_code] = batch_candidates[i][
+                            :15
+                        ]  # Keep top 15 per tone
 
                 # Build position -> candidates map
                 strong_beat_candidates: dict[str, list[str]] = {}
                 for pos_str, tone_code in position_tone_map.items():
-                    strong_beat_candidates[pos_str] = tone_to_candidates.get(tone_code, [])
+                    strong_beat_candidates[pos_str] = tone_to_candidates.get(
+                        tone_code, []
+                    )
             else:
                 strong_beat_candidates = {}
 
@@ -536,8 +573,9 @@ class AgentOrchestrator:
                 )
 
                 theme_candidates_list: list[list[str]] = (
-                    theme_candidates_raw if isinstance(theme_candidates_raw, list) and
-                    all(isinstance(item, list) for item in theme_candidates_raw)
+                    theme_candidates_raw
+                    if isinstance(theme_candidates_raw, list)
+                    and all(isinstance(item, list) for item in theme_candidates_raw)
                     else []
                 )
 
@@ -546,21 +584,25 @@ class AgentOrchestrator:
                     if i < len(theme_candidates_list):
                         theme_candidates[tone_code] = theme_candidates_list[i][:20]
 
-                logger.info("主题相关声调码：%s → 候选词 %d 个", theme_tone_codes, sum(len(c) for c in theme_candidates.values()))
+                logger.info(
+                    "主题相关声调码：%s → 候选词 %d 个",
+                    theme_tone_codes,
+                    sum(len(c) for c in theme_candidates.values()),
+                )
 
             jyutping_map: dict = {
-                "reference_text":             reference_text,
-                "selected_jyutping":          jp_candidates[0] if jp_candidates else "",
-                "all_candidates":             jp_candidates,
-                "reference_tone_pattern":     tone_pattern,
-                "reference_tone_sequence":    reference_tone_sequence,
-                "tone_codes":                 tone_codes,
-                "melody_tone_sequence_0243":  melody_tone_sequence,
-                "rhyme_positions":            rhyme_positions,
-                "strong_beat_positions":      strong_beats,
-                "strong_beat_candidates":     strong_beat_candidates,
-                "theme_candidates":           theme_candidates,  # Theme-related words
-                "target_syllable_count":      syllable_count,
+                "reference_text": reference_text,
+                "selected_jyutping": jp_candidates[0] if jp_candidates else "",
+                "all_candidates": jp_candidates,
+                "reference_tone_pattern": tone_pattern,
+                "reference_tone_sequence": reference_tone_sequence,
+                "tone_codes": tone_codes,
+                "melody_tone_sequence_0243": melody_tone_sequence,
+                "rhyme_positions": rhyme_positions,
+                "strong_beat_positions": strong_beats,
+                "strong_beat_candidates": strong_beat_candidates,
+                "theme_candidates": theme_candidates,  # Theme-related words
+                "target_syllable_count": syllable_count,
             }
             result.jyutping_map = jyutping_map
             self._memory.set_pipeline_value("jyutping_map", jyutping_map)
@@ -616,9 +658,7 @@ class AgentOrchestrator:
             self._transition_state(_STATE_COMPOSITION)
 
             for attempt in range(self._max_revision_loops + 1):
-                logger.info(
-                    "创作尝试 %d/%d", attempt + 1, self._max_revision_loops + 1
-                )
+                logger.info("创作尝试 %d/%d", attempt + 1, self._max_revision_loops + 1)
                 await self._emit_event(
                     event_callback,
                     {
@@ -647,7 +687,8 @@ class AgentOrchestrator:
                 )
                 draft_jyutping: str = (
                     draft_output.get("jyutping", "")
-                    if isinstance(draft_output, dict) else ""
+                    if isinstance(draft_output, dict)
+                    else ""
                 )
 
                 if isinstance(draft_output, dict):
@@ -703,7 +744,8 @@ class AgentOrchestrator:
 
                 score: float = float(
                     validation_output.get("score", 0.0)
-                    if isinstance(validation_output, dict) else 0.0
+                    if isinstance(validation_output, dict)
+                    else 0.0
                 )
                 feedback: str = (
                     validation_output.get("feedback", "")
@@ -723,7 +765,9 @@ class AgentOrchestrator:
 
                 logger.info(
                     "校验第 %d 次：score=%.2f（阈值=%.2f）",
-                    attempt + 1, score, self._min_quality_score,
+                    attempt + 1,
+                    score,
+                    self._min_quality_score,
                 )
                 await self._emit_event(
                     event_callback,
@@ -737,11 +781,13 @@ class AgentOrchestrator:
                 )
 
                 if score >= self._min_quality_score:
-                    result.lyrics   = draft_lyrics
+                    result.lyrics = draft_lyrics
                     result.accepted = True
                     self._memory.set_best_result(
                         draft=draft_output if isinstance(draft_output, dict) else {},
-                        validation=validation_output if isinstance(validation_output, dict) else {},
+                        validation=validation_output
+                        if isinstance(validation_output, dict)
+                        else {},
                         score=score,
                     )
                     logger.info("✓ 歌词已在第 %d 次尝试时通过验收", attempt + 1)
@@ -759,13 +805,13 @@ class AgentOrchestrator:
 
                 corrections: list[str] = (
                     validation_output.get("corrections", [])
-                    if isinstance(validation_output, dict) else []
+                    if isinstance(validation_output, dict)
+                    else []
                 )
                 revision_instructions = (
                     f"上一草稿未通过校验（score={score:.2f}）。\n"
                     f"校验反馈：{feedback}\n"
-                    "需修改的问题：\n"
-                    + "\n".join(f"  - {c}" for c in corrections)
+                    "需修改的问题：\n" + "\n".join(f"  - {c}" for c in corrections)
                 )
                 self._memory.set_attempt_value(
                     "revision_instructions", revision_instructions
@@ -798,11 +844,15 @@ class AgentOrchestrator:
                     break
 
                 best_result = self._memory.get_best_result()
-                best_score = float(best_result.get("score", float("-inf")) or float("-inf"))
+                best_score = float(
+                    best_result.get("score", float("-inf")) or float("-inf")
+                )
                 if score > best_score:
                     self._memory.set_best_result(
                         draft=draft_output if isinstance(draft_output, dict) else {},
-                        validation=validation_output if isinstance(validation_output, dict) else {},
+                        validation=validation_output
+                        if isinstance(validation_output, dict)
+                        else {},
                         score=score,
                     )
 
@@ -810,7 +860,8 @@ class AgentOrchestrator:
             if not result.accepted and result.draft_history:
                 best_idx = (
                     result.validator_scores.index(max(result.validator_scores))
-                    if result.validator_scores else 0
+                    if result.validator_scores
+                    else 0
                 )
                 result.lyrics = result.draft_history[best_idx]
                 logger.warning(
@@ -848,7 +899,9 @@ class AgentOrchestrator:
         result.elapsed_seconds = time.perf_counter() - t0
         logger.info(
             "流水线完成  elapsed=%.1fs  accepted=%s  revisions=%d",
-            result.elapsed_seconds, result.accepted, result.revision_count,
+            result.elapsed_seconds,
+            result.accepted,
+            result.revision_count,
         )
 
         self._memory.set_final_result(
@@ -918,9 +971,7 @@ class AgentOrchestrator:
 
     def get_agent(self, name: str) -> Any:
         if name not in self._agents:
-            raise KeyError(
-                f"找不到代理 '{name}'，可用代理：{list(self._agents)}"
-            )
+            raise KeyError(f"找不到代理 '{name}'，可用代理：{list(self._agents)}")
         return self._agents[name]
 
     def list_agents(self) -> list[str]:
@@ -968,7 +1019,7 @@ class AgentOrchestrator:
         # Associate tools with servers using the declared tool_names list.
         # This avoids any undocumented API call and works reliably.
         for srv_config in MCP_REGISTRY.enabled_servers:
-            declared   = set(srv_config.tool_names)
+            declared = set(srv_config.tool_names)
             found_names = [t.name for t in all_tools if t.name in declared]
 
             if not found_names and declared:
@@ -977,13 +1028,12 @@ class AgentOrchestrator:
                 missing = declared - loaded_names
                 logger.warning(
                     "服务器 '%s' 声明了以下工具但未从 MCP 加载到：%s",
-                    srv_config.name, missing,
+                    srv_config.name,
+                    missing,
                 )
 
             MCP_REGISTRY.set_server_tools(srv_config.name, found_names)
-            logger.debug(
-                "服务器 '%s' 关联工具：%s", srv_config.name, found_names
-            )
+            logger.debug("服务器 '%s' 关联工具：%s", srv_config.name, found_names)
 
         MCP_REGISTRY.mark_connected()
 
@@ -1014,8 +1064,8 @@ class AgentOrchestrator:
 
         _builtin: dict[str, type] = {
             "lyrics-composer": LyricsComposerAgent,
-            "validator":       ValidatorAgent,
-            "word-selector":   WordSelectorAgent,
+            "validator": ValidatorAgent,
+            "word-selector": WordSelectorAgent,
         }
         for agent_name, cls in _builtin.items():
             if not AGENT_REGISTRY.has_class(agent_name):
@@ -1030,12 +1080,18 @@ class AgentOrchestrator:
                 logger.warning(
                     "代理 '%s' 没有注册对应的类。请使用 "
                     "@AGENT_REGISTRY.register('%s') 或在 _builtin 字典中添加。",
-                    agent_cfg.name, agent_cfg.name,
+                    agent_cfg.name,
+                    agent_cfg.name,
                 )
                 continue
 
-            cls   = AGENT_REGISTRY.get_class(agent_cfg.name)
-            tools = MCP_REGISTRY.get_tools_for_servers(agent_cfg.allowed_mcp_servers)
+            cls = AGENT_REGISTRY.get_class(agent_cfg.name)
+            if agent_cfg.name in {"lyrics-composer", "validator"}:
+                tools = []
+            else:
+                tools = MCP_REGISTRY.get_tools_for_servers(
+                    agent_cfg.allowed_mcp_servers
+                )
 
             instance = cls(
                 config=agent_cfg,
@@ -1049,7 +1105,9 @@ class AgentOrchestrator:
 
             logger.info(
                 "代理 '%s' 已初始化，绑定 %d 个工具：%s",
-                agent_cfg.name, len(tools), [t.name for t in tools],
+                agent_cfg.name,
+                len(tools),
+                [t.name for t in tools],
             )
 
     # ------------------------------------------------------------------
@@ -1071,9 +1129,7 @@ class AgentOrchestrator:
         - 计算性步骤已由 _call_tool_direct 直接处理
         """
         if agent_name not in self._agents:
-            logger.error(
-                "代理 '%s' 不存在。可用：%s", agent_name, list(self._agents)
-            )
+            logger.error("代理 '%s' 不存在。可用：%s", agent_name, list(self._agents))
             return {}
 
         agent = self._agents[agent_name]
@@ -1081,6 +1137,17 @@ class AgentOrchestrator:
 
         try:
             agent_result = await agent.run(task, **kwargs)
+            if not getattr(agent_result, "success", False):
+                logger.warning(
+                    "LLM 代理 '%s' 执行失败：%s",
+                    agent_name,
+                    getattr(agent_result, "error", "unknown error"),
+                )
+                self._memory.add_ai_message(
+                    f"[{agent_name}] 执行失败：{getattr(agent_result, 'error', 'unknown error')}"
+                )
+                return {"error": getattr(agent_result, "error", "agent failed")}
+
             data: dict[str, Any] = (
                 agent_result.data if hasattr(agent_result, "data") else {}
             )
@@ -1097,6 +1164,59 @@ class AgentOrchestrator:
             logger.exception("LLM 代理 '%s' 失败: %s", agent_name, exc)
             self._memory.add_ai_message(f"[{agent_name}] 错误：{exc}")
             return {"error": str(exc)}
+
+    async def _run_word_selector_isolated(
+        self,
+        task: str,
+        candidates: list[str],
+        context: dict[str, Any],
+        timeout_s: float,
+    ) -> dict[str, Any]:
+        """Run word selection with a cloned memory snapshot."""
+        if "word-selector" not in self._agents:
+            return {}
+
+        selector_template = self._agents["word-selector"]
+        selector_cls = type(selector_template)
+        selector = selector_cls(
+            config=selector_template.config,
+            llm=selector_template.llm,
+            memory=ShortTermMemory.from_dict(self._memory.to_dict()),
+            tools=[],
+        )
+
+        try:
+            result = await asyncio.wait_for(
+                selector.run(
+                    task,
+                    candidates=candidates,
+                    context=context,
+                    count=1,
+                ),
+                timeout=timeout_s,
+            )
+        except TimeoutError:
+            return {}
+
+        if not getattr(result, "success", False):
+            return {}
+
+        if isinstance(result.data, dict):
+            selected_words = result.data.get("selected_words")
+            if (
+                isinstance(selected_words, list)
+                and selected_words
+                and isinstance(selected_words[0], dict)
+            ):
+                return selected_words[0]
+
+        if isinstance(result.output, str):
+            payload: dict[str, Any] = {"word": result.output}
+            if isinstance(result.metadata, dict):
+                payload["reason"] = str(result.metadata.get("selection_reason", ""))
+            return payload
+
+        return {}
 
     async def _call_tool_direct(
         self,
@@ -1206,7 +1326,7 @@ class AgentOrchestrator:
         reference_text: str,
         event_callback: PipelineEventCallback | None,
     ) -> dict[str, Any]:
-        """Apply explicit word-selector strategy when candidate sets are large."""
+        """Apply phrase-first word selection, then fallback to single characters."""
         if "word-selector" not in self._agents:
             return draft_output
 
@@ -1219,7 +1339,10 @@ class AgentOrchestrator:
         rhyme_set = set(str(pos) for pos in rhyme_positions)
         selection_targets: list[tuple[int, list[str]]] = []
         for pos_str, candidates in candidate_map.items():
-            if not isinstance(candidates, list) or len(candidates) <= self._word_selector_threshold:
+            if (
+                not isinstance(candidates, list)
+                or len(candidates) <= self._word_selector_threshold
+            ):
                 continue
             if pos_str not in strong_set and pos_str not in rhyme_set:
                 continue
@@ -1239,12 +1362,169 @@ class AgentOrchestrator:
         if not selection_targets:
             return draft_output
 
+        selected_by_position: dict[int, list[str]] = {
+            pos: cands for pos, cands in sorted(selection_targets)
+        }
+        pending_positions = sorted(selected_by_position)
+        limited_positions = pending_positions[: self._word_selector_max_targets]
+        consumed_positions: set[int] = set()
         applied = 0
-        for position, candidates in sorted(selection_targets):
+        phrase_applied = 0
+        llm_calls = 0
+
+        use_fast_selector = self._word_selector_fast_mode == "always" or (
+            self._word_selector_fast_mode == "auto"
+            and len(limited_positions) > self._word_selector_max_llm_calls
+        )
+
+        midi_path = str(self._memory.get_pipeline_value("current_midi_path", ""))
+        phrase_spans = self._build_phrase_spans(
+            limited_positions,
+            max_len=max(2, self._phrase_selector_max_len),
+        )
+
+        # Tool calls are parallelized here by the orchestrator so we don't rely
+        # on the model to discover/use parallel execution patterns.
+        phrase_payload_map: dict[tuple[int, int], dict[str, Any]] = {}
+        if midi_path and phrase_spans:
+            phrase_tasks = [
+                self._call_tool_direct_safe(
+                    server_name="melody-mapper",
+                    tool_name="find_phrase_words",
+                    args={
+                        "file_path": midi_path,
+                        "phrase_start": start,
+                        "phrase_length": length,
+                    },
+                    parse_json=True,
+                    default={},
+                    event_callback=event_callback,
+                )
+                for start, length in phrase_spans
+            ]
+            phrase_results = await asyncio.gather(*phrase_tasks)
+            for (start, length), payload in zip(phrase_spans, phrase_results):
+                if isinstance(payload, dict):
+                    phrase_payload_map[(start, length)] = payload
+
+        # Phrase-first: one LLM decision can replace multiple character-level calls.
+        phrase_specs: list[tuple[int, int, list[str]]] = []
+        phrase_tasks: list[Any] = []
+        for start, length in phrase_spans:
+            phrase_payload = phrase_payload_map.get((start, length), {})
+            if not isinstance(phrase_payload, dict):
+                continue
+
+            phrase_candidates = phrase_payload.get("words", [])
+            if not isinstance(phrase_candidates, list) or not phrase_candidates:
+                continue
+
+            phrase_candidates = [
+                str(w).strip() for w in phrase_candidates if str(w).strip()
+            ]
+            phrase_candidates = [w for w in phrase_candidates if len(w) == length]
+            phrase_candidates = self._candidate_constraint_engine.apply(
+                phrase_candidates
+            )
+            if not phrase_candidates:
+                continue
+
+            if use_fast_selector:
+                selected_phrase = phrase_candidates[0]
+                if len(selected_phrase) == length:
+                    for offset, ch in enumerate(selected_phrase):
+                        pos = start + offset
+                        if pos >= len(lyric_chars):
+                            break
+                        lyric_chars[pos] = ch
+                        consumed_positions.add(pos)
+                        applied += 1
+                    phrase_applied += 1
+                continue
+
+            if llm_calls >= self._word_selector_max_llm_calls:
+                continue
+
+            phrase_context = {
+                "position": f"第 {start + 1} 到第 {start + length} 字",
+                "surrounding_before": raw_lyrics[max(0, start - 5) : start],
+                "surrounding_after": raw_lyrics[start + length : start + length + 5],
+                "melody_tone": " ".join(
+                    str(melody_tone_sequence[i])
+                    for i in range(
+                        start, min(start + length, len(melody_tone_sequence))
+                    )
+                ),
+                "semantic_field": reference_text[:50],
+                "theme": "歌词创作",
+                "rhyme_requirement": (
+                    "需与押韵位置协调"
+                    if any(str(i) in rhyme_set for i in range(start, start + length))
+                    else ""
+                ),
+            }
+            phrase_specs.append((start, length, phrase_candidates))
+            phrase_tasks.append(
+                asyncio.wait_for(
+                    self._run_agent(
+                        agent_name="word-selector",
+                        task=f"为歌词片段位置 {start}-{start + length - 1} 选择最合适的短语",
+                        context_key="selected_words",
+                        candidates=phrase_candidates[:20],
+                        context=phrase_context,
+                        count=1,
+                    ),
+                    timeout=self._word_selector_call_timeout_s,
+                )
+            )
+            llm_calls += 1
+
+        if phrase_tasks:
+            phrase_results = await asyncio.gather(*phrase_tasks, return_exceptions=True)
+            for (start, length, phrase_candidates), phrase_selection in zip(
+                phrase_specs,
+                phrase_results,
+            ):
+                selected_phrase = ""
+                if isinstance(phrase_selection, Exception):
+                    logger.warning("Word selector phrase failed: %s", phrase_selection)
+                elif isinstance(phrase_selection, dict):
+                    if isinstance(phrase_selection.get("word"), str):
+                        selected_phrase = str(phrase_selection.get("word", ""))
+                    elif (
+                        isinstance(phrase_selection.get("selected_words"), list)
+                        and phrase_selection["selected_words"]
+                    ):
+                        first = phrase_selection["selected_words"][0]
+                        if isinstance(first, dict):
+                            selected_phrase = str(first.get("word", ""))
+
+                if len(selected_phrase) != length:
+                    selected_phrase = phrase_candidates[0]
+
+                if len(selected_phrase) != length:
+                    continue
+
+                for offset, ch in enumerate(selected_phrase):
+                    pos = start + offset
+                    if pos >= len(lyric_chars):
+                        break
+                    lyric_chars[pos] = ch
+                    consumed_positions.add(pos)
+                    applied += 1
+                phrase_applied += 1
+
+        # Fallback: remaining positions still use single-character selection.
+        fallback_tasks: list[asyncio.Task[dict[str, Any]]] = []
+        fallback_specs: list[tuple[int, list[str], dict[str, Any]]] = []
+        for position in limited_positions:
+            if position in consumed_positions:
+                continue
+            candidates = selected_by_position[position]
             context = {
                 "position": f"第 {position + 1} 字",
-                "surrounding_before": raw_lyrics[max(0, position - 5):position],
-                "surrounding_after": raw_lyrics[position + 1: position + 6],
+                "surrounding_before": raw_lyrics[max(0, position - 5) : position],
+                "surrounding_after": raw_lyrics[position + 1 : position + 6],
                 "melody_tone": (
                     str(melody_tone_sequence[position])
                     if position < len(melody_tone_sequence)
@@ -1257,27 +1537,62 @@ class AgentOrchestrator:
                 else "",
             }
 
-            selection = await self._run_agent(
-                agent_name="word-selector",
-                task=f"为歌词位置 {position} 选择最合适的词语",
-                context_key="selected_words",
-                candidates=candidates,
-                context=context,
-                count=1,
+            selected_word = ""
+            if use_fast_selector or llm_calls >= self._word_selector_max_llm_calls:
+                selected_word = str(candidates[0]) if candidates else ""
+            else:
+                llm_calls += 1
+
+                fallback_specs.append((position, candidates, context))
+                fallback_tasks.append(
+                    asyncio.create_task(
+                        self._run_word_selector_isolated(
+                            task=f"为歌词位置 {position} 选择最合适的词语",
+                            candidates=candidates,
+                            context=context,
+                            timeout_s=self._word_selector_call_timeout_s,
+                        )
+                    )
+                )
+
+            if selected_word:
+                if len(selected_word) != 1:
+                    selected_word = str(candidates[0]) if candidates else ""
+
+                if len(selected_word) == 1:
+                    lyric_chars[position] = selected_word
+                    applied += 1
+
+        if fallback_tasks:
+            selection_results = await asyncio.gather(
+                *fallback_tasks,
+                return_exceptions=True,
             )
 
-            selected_word = ""
-            if isinstance(selection, dict):
-                if isinstance(selection.get("word"), str):
-                    selected_word = str(selection.get("word", ""))
-                elif isinstance(selection.get("selected_words"), list) and selection["selected_words"]:
-                    first = selection["selected_words"][0]
-                    if isinstance(first, dict):
-                        selected_word = str(first.get("word", ""))
+            for (position, candidates, _), selection in zip(
+                fallback_specs,
+                selection_results,
+            ):
+                selected_word = ""
+                if isinstance(selection, Exception):
+                    logger.warning("Word selector fallback failed: %s", selection)
+                elif isinstance(selection, dict):
+                    if isinstance(selection.get("word"), str):
+                        selected_word = str(selection.get("word", ""))
+                    elif (
+                        isinstance(selection.get("selected_words"), list)
+                        and selection["selected_words"]
+                    ):
+                        first = selection["selected_words"][0]
+                        if isinstance(first, dict):
+                            selected_word = str(first.get("word", ""))
 
-            if len(selected_word) == 1:
-                lyric_chars[position] = selected_word
-                applied += 1
+                if len(selected_word) != 1:
+                    selected_word = str(candidates[0]) if candidates else ""
+
+                if len(selected_word) == 1:
+                    lyric_chars[position] = selected_word
+                    applied += 1
 
         if applied == 0:
             return draft_output
@@ -1293,9 +1608,50 @@ class AgentOrchestrator:
                 "applied_count": applied,
                 "target_count": len(selection_targets),
                 "threshold": self._word_selector_threshold,
+                "phrase_applied_count": phrase_applied,
+                "llm_calls": llm_calls,
+                "fast_mode": use_fast_selector,
+                "limited_targets": len(limited_positions),
             },
         )
         return draft_output
+
+    @staticmethod
+    def _build_phrase_spans(
+        positions: list[int],
+        max_len: int,
+    ) -> list[tuple[int, int]]:
+        """Build contiguous phrase spans from target positions."""
+        if not positions:
+            return []
+
+        spans: list[tuple[int, int]] = []
+        run_start = positions[0]
+        run_prev = positions[0]
+
+        def flush_run(start: int, end: int) -> None:
+            run_len = end - start + 1
+            if run_len < 2:
+                return
+            cursor = start
+            while cursor <= end:
+                remaining = end - cursor + 1
+                if remaining < 2:
+                    break
+                length = min(max_len, remaining)
+                spans.append((cursor, length))
+                cursor += length
+
+        for pos in positions[1:]:
+            if pos == run_prev + 1:
+                run_prev = pos
+                continue
+            flush_run(run_start, run_prev)
+            run_start = pos
+            run_prev = pos
+
+        flush_run(run_start, run_prev)
+        return spans
 
     @staticmethod
     def _rebuild_lyrics_with_original_breaks(
@@ -1473,14 +1829,15 @@ class AgentOrchestrator:
                 cfg["model"],
                 cfg["base_url"],
             )
-            return ChatOpenAI(
-                model=cfg["model"],
-                base_url=cfg["base_url"],
-                api_key=cfg["api_key"],
-                temperature=cfg["temperature"],
-                max_tokens=cfg.get("max_tokens", 8192),
-                extra_body={"thinking": False},
-            )
+            kwargs: dict[str, Any] = {
+                "model": cfg["model"],
+                "base_url": cfg["base_url"],
+                "api_key": cfg["api_key"],
+                "temperature": cfg["temperature"],
+                "max_tokens": cfg.get("max_tokens", 8192),
+                "extra_body": {"thinking": False},
+            }
+            return ChatOpenAI(**kwargs)
         elif PROVIDER == "lmstudio":
             # LM Studio: OpenAI-compatible API, no real key needed
             from langchain_openai import ChatOpenAI
@@ -1490,14 +1847,15 @@ class AgentOrchestrator:
                 "使用 LM Studio 提供商  model=%s  base_url=%s",
                 cfg["model"], cfg["base_url"],
             )
-            return ChatOpenAI(
-                model=cfg["model"],
-                base_url=cfg["base_url"],
-                api_key=cfg["api_key"],
-                temperature=cfg["temperature"],
-                max_tokens=cfg.get("max_tokens", 8192),
-                extra_body={"thinking": False},
-            )
+            kwargs: dict[str, Any] = {
+                "model": cfg["model"],
+                "base_url": cfg["base_url"],
+                "api_key": cfg["api_key"],
+                "temperature": cfg["temperature"],
+                "max_tokens": cfg.get("max_tokens", 8192),
+                "extra_body": {"thinking": False},
+            }
+            return ChatOpenAI(**kwargs)
         else:
             # Default: Ollama (local)
             from langchain_ollama import ChatOllama
