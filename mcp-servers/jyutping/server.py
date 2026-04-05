@@ -106,6 +106,10 @@ _JP_SYLLABLE_RE = re.compile(r"[a-z]+[1-6]", re.IGNORECASE)
 # Matches a purely numeric string (the tone codes returned by the API)
 _NUMERIC_RE = re.compile(r"^\d+$")
 _API_CACHE: dict[str, tuple[float, list[str]]] = {}
+_GLOBAL_HTTP_CLIENT = httpx.AsyncClient(
+    timeout=_TIMEOUT,
+    limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
+)
 
 
 def _cache_get(query: str) -> list[str] | None:
@@ -195,7 +199,7 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
     a `list[str]` or `list[list[str]]`.
     """
 
-    async def _single_call(query: str, client: httpx.AsyncClient) -> list[str]:
+    async def _single_call(query: str) -> list[str]:
         cached = _cache_get(query)
         if cached is not None:
             return list(cached)
@@ -204,13 +208,13 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
         last_exc = None
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
-                resp = await client.post(
+                resp = await _GLOBAL_HTTP_CLIENT.post(
                     _API_URL,
                     json=payload,
                     headers={
                         "Content-Type": "application/json",
-                        "Accept":       "application/json",
-                        "User-Agent":   "CantoneseAgent/1.0 (MCP; 0243.hk)",
+                        "Accept": "application/json",
+                        "User-Agent": "CantoneseAgent/1.0 (MCP; 0243.hk)",
                     },
                 )
                 resp.raise_for_status()
@@ -228,30 +232,34 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
                 last_exc = exc
                 logger.warning(
                     "0243.hk HTTP 错误（第 %d/%d 次）: %s",
-                    attempt, _MAX_RETRIES, getattr(exc.response, "status_code", "?")
+                    attempt,
+                    _MAX_RETRIES,
+                    getattr(exc.response, "status_code", "?"),
                 )
             except httpx.RequestError as exc:
                 last_exc = exc
                 logger.warning(
                     "0243.hk 请求错误（第 %d/%d 次）: %s",
-                    attempt, _MAX_RETRIES, exc,
+                    attempt,
+                    _MAX_RETRIES,
+                    exc,
                 )
             except json.JSONDecodeError as exc:
                 last_exc = exc
                 logger.warning(
                     "0243.hk JSON 解析失败（第 %d/%d 次）: %s",
-                    attempt, _MAX_RETRIES, exc,
+                    attempt,
+                    _MAX_RETRIES,
+                    exc,
                 )
 
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_RETRY_DELAY * attempt)
 
-        # All retries exhausted, raise the last exception
         if last_exc is not None:
             raise last_exc
         return []
 
-    # Batch path
     if isinstance(nums, (list, tuple)):
         if not nums:
             return []
@@ -268,14 +276,13 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
         fetched_results: dict[str, list[str]] = {}
         if missing_queries:
             semaphore = asyncio.Semaphore(8)
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
 
-                async def _fetch(q: str) -> tuple[str, list[str]]:
-                    async with semaphore:
-                        return q, await _single_call(q, client)
+            async def _fetch(q: str) -> tuple[str, list[str]]:
+                async with semaphore:
+                    return q, await _single_call(q)
 
-                tasks = [_fetch(query) for query in missing_queries]
-                fetched_pairs = await asyncio.gather(*tasks)
+            tasks = [_fetch(query) for query in missing_queries]
+            fetched_pairs = await asyncio.gather(*tasks)
             fetched_results = {query: payload for query, payload in fetched_pairs}
 
         return [
@@ -283,9 +290,7 @@ async def _call_api(nums: str | list[str]) -> list[Any]:
             for query in normalized_queries
         ]
 
-    # Single path
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        return await _single_call(str(nums), client)
+    return await _single_call(str(nums))
 
 
 # ---------------------------------------------------------------------------
