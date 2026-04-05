@@ -691,6 +691,29 @@ class AgentOrchestrator:
                     else ""
                 )
 
+                # --- Self-check before submitting to validator ---
+                self_check_result = None
+                if isinstance(draft_output, dict):
+                    self_check_result = draft_output.get("self_check", {})
+                    if self_check_result and not self_check_result.get("passed", False):
+                        issues = self_check_result.get("issues", [])
+                        logger.warning(
+                            "composer self-check FAILED (attempt %d): %s",
+                            attempt + 1,
+                            "; ".join(issues),
+                        )
+                        await self._emit_event(
+                            event_callback,
+                            {
+                                "type": "self_check_failed",
+                                "attempt": attempt + 1,
+                                "issues": issues,
+                                "message": f"Self-check failed: {'; '.join(issues)}",
+                            },
+                        )
+                        # Skip to next attempt without calling validator
+                        continue
+
                 if isinstance(draft_output, dict):
                     draft_output = await self._apply_orchestrator_word_selection(
                         draft_output=draft_output,
