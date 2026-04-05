@@ -32,7 +32,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agent.base_agent import BaseAgent, AgentResult
+from agent.base_agent import BaseAgent, AgentResult, STRUCTURED_OUTPUT_SKIPPED
 from agent.config import PROMPTS_AGENTS_DIR
 from agent.registry import AGENT_REGISTRY
 
@@ -156,6 +156,9 @@ class WordSelectorAgent(BaseAgent):
             extra_user_message=prompt,
         )
 
+        if structured is STRUCTURED_OUTPUT_SKIPPED:
+            structured = None
+
         if structured is not None:
             parsed = (
                 structured.model_dump()
@@ -234,7 +237,7 @@ class WordSelectorAgent(BaseAgent):
             parsed = self._extract_selection_heuristically(raw, candidates)
 
         # 验证选中的词是否在候选列表中
-        selected_word = parsed.get("word", "").strip()
+        selected_word = str(parsed.get("word", "")).strip()
         if selected_word and selected_word not in candidates:
             # 尝试模糊匹配
             for c in candidates:
@@ -247,6 +250,9 @@ class WordSelectorAgent(BaseAgent):
                     selected_word,
                 )
                 selected_word = candidates[0] if candidates else ""
+
+        if not selected_word and candidates:
+            selected_word = candidates[0]
 
         parsed["word"] = selected_word
         return self._normalize_selection(parsed, candidates)
@@ -269,6 +275,9 @@ class WordSelectorAgent(BaseAgent):
                     selected_word,
                 )
                 selected_word = candidates[0] if candidates else ""
+
+        if not selected_word and candidates:
+            selected_word = candidates[0]
 
         alternatives_raw = parsed.get("alternatives", [])
         alternatives = (

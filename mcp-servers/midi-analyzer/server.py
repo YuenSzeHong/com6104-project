@@ -424,11 +424,12 @@ def _extract_xf_lyrics(file_path: str) -> list[str]:
     except Exception:
         return []
 
-    if not getattr(xf, "xfkm", None):
+    xfkm_messages = list(getattr(xf, "xfkm", []) or [])
+    if not xfkm_messages:
         return []
 
     units: list[str] = []
-    for msg in xf.xfkm:
+    for msg in xfkm_messages:
         if getattr(msg, "type", None) != "lyrics":
             continue
         raw = getattr(msg, "text", "")

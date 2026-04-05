@@ -49,7 +49,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agent.base_agent import BaseAgent, AgentResult
+from agent.base_agent import BaseAgent, AgentResult, STRUCTURED_OUTPUT_SKIPPED
 from agent.registry import AGENT_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -570,6 +570,9 @@ Do not include any other text.
                 schema=ArtisticScoreSchema,
                 extra_user_message=prompt,
             )
+            if structured is STRUCTURED_OUTPUT_SKIPPED:
+                structured = None
+
             if structured is not None:
                 payload = (
                     structured.model_dump()

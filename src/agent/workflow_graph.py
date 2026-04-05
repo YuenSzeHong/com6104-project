@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
 
@@ -56,7 +56,7 @@ def _route_after_validate(state: WorkflowState) -> str:
 
 
 def build_workflow_graph():
-    graph = StateGraph(WorkflowState)
+    graph = StateGraph(cast(Any, WorkflowState))
 
     graph.add_node("midi_analysis", _identity)
     graph.add_node("melody_mapping", _identity)

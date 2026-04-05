@@ -34,22 +34,31 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from importlib import import_module
+from typing import Any, Callable, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
+from .memory import ShortTermMemory
+from .config import AgentConfig, PROVIDER, WORKFLOW_CONFIG
+
 # Lazy import for current LangChain agent API
+create_agent: Callable[..., Any] | None
 try:
-    from langchain.agents import create_agent
+    _agents_module = import_module("langchain.agents")
+    create_agent = cast(
+        Callable[..., Any] | None, getattr(_agents_module, "create_agent", None)
+    )
 except ImportError:
     create_agent = None
 
-from .memory import ShortTermMemory
-from .config import AgentConfig, WORKFLOW_CONFIG
-
 logger = logging.getLogger(__name__)
+
+
+# Sentinel returned when structured output is intentionally skipped.
+STRUCTURED_OUTPUT_SKIPPED = object()
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +281,9 @@ class BaseAgent(ABC):
         The text content of the LLM's reply.
         """
         if messages is None:
-            messages = self._memory.get_messages()
+            # Keep only recent turns to avoid overflowing context when prior
+            # tool traces are verbose.
+            messages = self._memory.get_last_n_messages(24)
 
         if extra_user_message:
             messages = list(messages) + [HumanMessage(content=extra_user_message)]
@@ -301,6 +312,13 @@ class BaseAgent(ABC):
 
         if extra_user_message:
             messages = list(messages) + [HumanMessage(content=extra_user_message)]
+
+        if PROVIDER == "ollama-cloud":
+            self._memory.add_ai_message(
+                f"[{self.name}] ollama-cloud 结构化输出不稳定，直接使用文本生成。",
+                metadata={"agent": self.name, "event": "structured_skipped"},
+            )
+            return STRUCTURED_OUTPUT_SKIPPED
 
         if not hasattr(self._llm, "with_structured_output"):
             self._log.debug("当前模型不支持 with_structured_output，回退到文本解析")
@@ -362,7 +380,8 @@ class BaseAgent(ABC):
         if self._executor is None:
             raise RuntimeError("Agent graph not initialized")
 
-        messages = list(self._memory.get_messages(include_system=False))
+        # Use a compact rolling window for tool-agent turns.
+        messages = list(self._memory.get_last_n_messages(24, include_system=False))
         messages.append(HumanMessage(content=full_task))
 
         # Record a marker to memory so GUI shows the agent is working
@@ -378,6 +397,10 @@ class BaseAgent(ABC):
         self._record_agent_messages(result)
 
         output_str = self._extract_agent_output(result)
+        if not output_str.strip():
+            # Recover from runs where the model only emitted tool calls and
+            # never produced a final assistant text.
+            output_str = self._extract_lyrics_from_tool_calls(result)
         self._log.debug("_invoke_with_tools | extracted_output=%r", output_str[:200])
 
         return output_str
@@ -441,10 +464,43 @@ class BaseAgent(ABC):
                     str(content)[:100],
                 )
 
-            # Add to memory
-            self._memory._append_turn([msg], metadata={"agent": self.name})
+            # Add to memory with truncation to avoid token explosion.
+            compact_msg: BaseMessage | None = None
+            if isinstance(msg, AIMessage):
+                text = str(content) if content is not None else ""
+                if text.strip():
+                    compact_msg = AIMessage(content=text[:800])
+            elif isinstance(msg, ToolMessage):
+                tool_name = getattr(msg, "name", "tool")
+                compact_msg = AIMessage(content=f"[tool:{tool_name}] result received")
+
+            if compact_msg is not None:
+                self._memory._append_turn([compact_msg], metadata={"agent": self.name})
             if content_hash:
                 existing_content_hashes.add(content_hash)
+
+    @staticmethod
+    def _extract_lyrics_from_tool_calls(result: Any) -> str:
+        """Best-effort recovery when agent output is empty but tool calls contain lyrics."""
+        if not isinstance(result, dict):
+            return ""
+        messages = result.get("messages", [])
+        if not isinstance(messages, list):
+            return ""
+
+        for msg in reversed(messages):
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls:
+                continue
+            for tc in reversed(tool_calls):
+                if str(tc.get("name", "")) != "count_syllables":
+                    continue
+                args = tc.get("args", {})
+                if isinstance(args, dict):
+                    lyrics = str(args.get("lyrics", "")).strip()
+                    if lyrics:
+                        return lyrics
+        return ""
 
     def _build_executor(self) -> Any:
         """
