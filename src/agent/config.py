@@ -53,7 +53,7 @@ ProviderName = Literal["ollama", "ollama-cloud", "lmstudio"]
 # Change this constant OR set env-var LLM_PROVIDER at runtime.
 DEFAULT_PROVIDER: ProviderName = "lmstudio"
 
-PROVIDER: ProviderName = os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).lower()  # type: ignore[assignment]
+PROVIDER: ProviderName = os.getenv("LLM_PROVIDER", DEFAULT_PROVIDER).strip().lower()  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Ollama configuration  (local, no API key required)
@@ -331,7 +331,7 @@ class AgentConfig:
 # MCP servers where they are independently testable by MCP Inspector.
 #
 # The two remaining agents are the parts that genuinely require LLM reasoning:
-#   1. LyricsComposerAgent  – creative generation using all MCP tools
+#   1. LyricsComposerAgent  – creative generation from prepared context
 #   2. ValidatorAgent       – 在计算评分之上补充艺术质量判断与修改建议
 #
 # The orchestrator calls the midi-analyzer and jyutping MCP tools directly
@@ -342,10 +342,8 @@ AGENTS: list[AgentConfig] = [
     # ------------------------------------------------------------------
     # 1. 歌词创作代理  (LLM agent)
     #
-    # Has access to ALL three MCP servers:
-    #   - midi-analyzer   → read MIDI analysis results
-    #   - jyutping        → candidate lookup, Jyutping conversion, continuation
-    #   - lyrics-validator → self-check before submitting draft
+    # Runs as pure LLM generation over orchestrator-prepared context.
+    # Direct MCP tools are intentionally disabled to avoid ReAct overhead.
     # ------------------------------------------------------------------
     AgentConfig(
         name="lyrics-composer",
@@ -354,14 +352,14 @@ AGENTS: list[AgentConfig] = [
             "主用途是将外语歌或现有歌词改编成可唱的粤语版本；"
             "若没有原歌词，也可根据主题或情景原创填词。"
         ),
-        allowed_mcp_servers=["midi-analyzer", "jyutping", "lyrics-validator"],
+        allowed_mcp_servers=[],
         prompt_file=PROMPTS_DIR / "lyrics-composer.md",
     ),
     # ------------------------------------------------------------------
     # 2. 验收代理  (LLM agent)
     #
-    # Uses lyrics-validator for all computational checks, then adds
-    # an LLM-based artistic-quality judgment on top.
+    # Runs as pure LLM judgment over orchestrator-prepared validation context.
+    # Direct MCP tools are intentionally disabled to avoid ReAct overhead.
     # ------------------------------------------------------------------
     AgentConfig(
         name="validator",
@@ -370,7 +368,7 @@ AGENTS: list[AgentConfig] = [
             "调用 lyrics-validator MCP 工具完成可唱性检查（音节数、lean 0243 旋律贴合度、押韵），"
             "再由 LLM 评判艺术质量，给出是否接受当前改编结果及修改建议。"
         ),
-        allowed_mcp_servers=["jyutping", "lyrics-validator"],
+        allowed_mcp_servers=[],
         prompt_file=PROMPTS_DIR / "validator.md",
     ),
     # ------------------------------------------------------------------
