@@ -43,13 +43,13 @@ flowchart TD
     J --> E
 ```
 
-| Step | Component | Role |
-|------|-----------|------|
-| 1 | `midi-analyzer` MCP server | Extract syllable count, BPM, strong beats, rhyme positions |
-| 2 | `melody-mapper` MCP server | Derive the lean 0243 melody target sequence |
-| 3 | `jyutping` MCP server | Convert candidate text, continue phrases, and query constrained words |
-| 4 | `lyrics-composer` agent | Rewrite a foreign/existing lyric into singable Cantonese, or write from a theme |
-| 5 | `validator` agent | Evaluate the current Cantonese adaptation and request revisions if needed |
+| Step | Component                  | Role                                                                            |
+| ---- | -------------------------- | ------------------------------------------------------------------------------- |
+| 1    | `midi-analyzer` MCP server | Extract syllable count, BPM, strong beats, rhyme positions                      |
+| 2    | `melody-mapper` MCP server | Derive the lean 0243 melody target sequence                                     |
+| 3    | `jyutping` MCP server      | Convert candidate text, continue phrases, and query constrained words           |
+| 4    | `lyrics-composer` agent    | Rewrite a foreign/existing lyric into singable Cantonese, or write from a theme |
+| 5    | `validator` agent          | Evaluate the current Cantonese adaptation and request revisions if needed       |
 
 ### Performance Notes
 
@@ -62,34 +62,34 @@ If you want to tune selection throughput further, the relevant knobs are the `WO
 
 ### LLM Providers
 
-| Provider | Config | Notes |
-|----------|--------|-------|
-| **Ollama** | `LLM_PROVIDER=ollama` | Runs `qwen3.5:4b` locally. No API key needed. |
-| **LM Studio** (default) | `LLM_PROVIDER=lmstudio` | OpenAI-compatible API on `localhost:1234` with `qwen3.5-4b@q4_k_m`. No API key needed. |
+| Provider                | Config                  | Notes                                                                                  |
+| ----------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| **Ollama** (default)    | `LLM_PROVIDER=ollama`   | Runs `qwen3.5:4b` locally. No API key needed.                                          |
+| **LM Studio**           | `LLM_PROVIDER=lmstudio` | OpenAI-compatible API on `localhost:1234` with `qwen3.5-4b@q4_k_m`. No API key needed. |
 
-LM Studio uses `langchain-openai`'s `ChatOpenAI` with a custom `base_url`, which is the standard LangChain pattern for OpenAI-compatible local servers.
+Both providers use LangChain adapters: Ollama via `langchain-ollama`, and LM Studio via `langchain-openai` with a custom `base_url`.
 
 ### Requirements Compliance
 
-| Requirement | Implementation |
-|-------------|----------------|
+| Requirement        | Implementation                                                               |
+| ------------------ | ---------------------------------------------------------------------------- |
 | ≥ 2 external tools | `jyutping`, `midi-analyzer`, `melody-mapper`, `lyrics-validator` MCP servers |
-| MCP protocol | Both servers use `mcp`/`fastmcp`, testable with MCP Inspector |
-| Short-term memory | `ShortTermMemory` class with sliding window + structured context store |
-| GitHub | This repository |
+| MCP protocol       | Both servers use `mcp`/`fastmcp`, testable with MCP Inspector                |
+| Short-term memory  | `ShortTermMemory` class with sliding window + structured context store       |
+| GitHub             | This repository                                                              |
 
 ### Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| LLM framework | LangChain + LangChain MCP Adapters |
-| Default local LLM | LM Studio with `qwen3.5-4b@q4_k_m` |
-| Alternate local provider | Ollama with `qwen3.5:4b` |
-| MIDI analysis | `mido` |
-| Cantonese lookup | 0243.hk API |
-| MCP tooling | `mcp` + `fastmcp` |
-| Short-term memory | Custom sliding-window `ShortTermMemory` |
-| Agent prompts | External Markdown files in Chinese |
+| Component                | Technology                              |
+| ------------------------ | --------------------------------------- |
+| LLM framework            | LangChain + LangChain MCP Adapters      |
+| Default local LLM        | LM Studio with `qwen3.5-4b@q4_k_m`      |
+| Alternate local provider | Ollama with `qwen3.5:4b`                |
+| MIDI analysis            | `mido`                                  |
+| Cantonese lookup         | 0243.hk API                             |
+| MCP tooling              | `mcp` + `fastmcp`                       |
+| Short-term memory        | Custom sliding-window `ShortTermMemory` |
+| Agent prompts            | External Markdown files in Chinese      |
 
 ### Repository Layout
 
@@ -148,12 +148,12 @@ $env:LLM_PROVIDER = "lmstudio"
 python src/main.py --gui
 ```
 
-### Hatch + uv Workflow
+### Build and Development
 
-This project supports using Hatch in a uv-backed mode (similar to yt-dlp style workflows):
+This project uses Hatch as a task runner with uv as the backend installer:
 
 ```bash
-# Install dev dependencies in Hatch default env (uses installer = "uv")
+# Install dev dependencies
 hatch env create
 
 # Run checks
@@ -161,10 +161,10 @@ hatch run lint
 hatch run type
 hatch run check
 
-# Run tests (pytest, no devscripts wrapper)
+# Run tests
 hatch run test
 
-# Format (yt-dlp-like style pipeline)
+# Format code
 hatch run fmt
 
 # Install pre-commit hook
@@ -173,9 +173,9 @@ hatch run precommit-install
 
 Notes:
 
-- Hatch and uv are compatible in this setup.
-- `uv sync` continues to work as before; Hatch is an additional runner layer.
-- We intentionally use `pytest` directly instead of a custom `devscripts.run_tests` wrapper.
+- Hatch and uv work together; Hatch is a task runner on top of uv.
+- `uv sync` works independently for direct dependency management.
+- Tests run via pytest directly.
 
 Note: the CLI entrypoint is currently used mainly to start Gradio. The old
 interactive CLI mode is no longer the primary workflow.
@@ -184,18 +184,18 @@ interactive CLI mode is no longer the primary workflow.
 
 The app automatically loads `.env` from the repository root. Shell variables and CLI flags still take precedence.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `LLM_PROVIDER` | `lmstudio` | LLM provider: `ollama`, `ollama-cloud`, or `lmstudio` |
-| `OLLAMA_MODEL` | `qwen3.5:4b` | Ollama model name |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `LMSTUDIO_MODEL` | `qwen3.5-4b@q4_k_m` | LM Studio model name |
-| `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio API base URL |
-| `LLM_TEMPERATURE` | `0.7` | Sampling temperature |
-| `LLM_CTX` | `8192` | Context window size |
-| `MAX_REVISION_LOOPS` | `3` | Maximum revision rounds after the first draft (total attempts = `1 + MAX_REVISION_LOOPS`) |
-| `MIN_QUALITY_SCORE` | `0.75` | Minimum acceptance score |
-| `MEMORY_MAX_TURNS` | `20` | Sliding-window memory size |
+| Variable             | Default                    | Purpose                                                                                   |
+| -------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
+| `LLM_PROVIDER`       | `lmstudio`                 | LLM provider: `ollama`, `ollama-cloud`, or `lmstudio`                                     |
+| `OLLAMA_MODEL`       | `qwen3.5:4b`               | Ollama model name                                                                         |
+| `OLLAMA_BASE_URL`    | `http://localhost:11434`   | Ollama server URL                                                                         |
+| `LMSTUDIO_MODEL`     | `qwen3.5-4b@q4_k_m`        | LM Studio model name                                                                      |
+| `LMSTUDIO_BASE_URL`  | `http://localhost:1234/v1` | LM Studio API base URL                                                                    |
+| `LLM_TEMPERATURE`    | `0.7`                      | Sampling temperature                                                                      |
+| `LLM_CTX`            | `8192`                     | Context window size                                                                       |
+| `MAX_REVISION_LOOPS` | `3`                        | Maximum revision rounds after the first draft (total attempts = `1 + MAX_REVISION_LOOPS`) |
+| `MIN_QUALITY_SCORE`  | `0.75`                     | Minimum acceptance score                                                                  |
+| `MEMORY_MAX_TURNS`   | `20`                       | Sliding-window memory size                                                                |
 
 ---
 
@@ -203,11 +203,11 @@ The app automatically loads `.env` from the repository root. Shell variables and
 
 All prompt files live under `prompts/` and are currently authored in Chinese because the target lyric generation task and model prompting work best that way.
 
-| File | Used By | Purpose |
-|------|---------|---------|
-| `prompts/system.md` | shared | Shared singing, tone, and output rules |
-| `prompts/lyrics-composer.md` | `lyrics-composer` | Adaptation and rewrite guidance |
-| `prompts/validator.md` | `validator` | Acceptance scoring and revision guidance |
+| File                         | Used By           | Purpose                                  |
+| ---------------------------- | ----------------- | ---------------------------------------- |
+| `prompts/system.md`          | shared            | Shared singing, tone, and output rules   |
+| `prompts/lyrics-composer.md` | `lyrics-composer` | Adaptation and rewrite guidance          |
+| `prompts/validator.md`       | `validator`       | Acceptance scoring and revision guidance |
 
 Prompt loading priority:
 
