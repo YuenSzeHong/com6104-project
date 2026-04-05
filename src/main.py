@@ -2,40 +2,26 @@
 """
 Cantonese Lyrics Agent – Main Entry Point
 ==========================================
-Run the multi-agent Cantonese lyric adaptation pipeline from the command line,
-drop into an interactive session, or launch a web-based GUI.
+Start the Gradio web UI for the Cantonese lyric adaptation workflow.
 
 Usage examples
 --------------
-# Launch the web GUI (recommended for demos)
+# Launch the web GUI
 python src/main.py --gui
 
 # GUI on a custom port
 python src/main.py --gui --port 8080
 
-# Adapt a song into Cantonese from a MIDI file and source lyric/theme
-python src/main.py --midi song.mid --text "青山依舊在，幾度夕陽紅"
-
-# Adapt from a source lyric file without terminal-encoding issues
-python src/main.py --midi song.mid --text-file test/lyrics/ドラえもんのうた.clean.txt
-
-# Interactive mode (prompts for input each run)
-python src/main.py --interactive
-
-# Override the local model
-python src/main.py --midi song.mid --text "..." --model qwen3.5:4b
+# Override the local model before launching GUI
+python src/main.py --gui --model qwen3.5:4b
 
 # Verbose logging
-python src/main.py --midi song.mid --text "..." -v
-
-# Print the pipeline result as JSON
-python src/main.py --midi song.mid --text "..." --json
+python src/main.py --gui -v
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import logging
 import os
@@ -97,38 +83,9 @@ logger = logging.getLogger("main")
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cantonese-lyrics-agent",
-        description=(
-            "Cantonese Lyrics Agent – recreates Cantonese singable lyrics "
-            "from a MIDI melody and a source lyric or theme."
-        ),
+        description="Cantonese Lyrics Agent – Gradio launcher.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
-    )
-
-    # --- Input ---
-    input_group = parser.add_argument_group("Input")
-    input_group.add_argument(
-        "--midi", "-m",
-        metavar="FILE",
-        help="Path to the input MIDI file (.mid / .midi).",
-    )
-    input_group.add_argument(
-        "--text", "-t",
-        metavar="TEXT",
-        help="Source lyric, translated lyric, or theme text used for Cantonese recreation.",
-    )
-    input_group.add_argument(
-        "--text-file",
-        metavar="FILE",
-        help="Read the source lyric / theme text from a file instead of passing it on the command line.",
-    )
-    input_group.add_argument(
-        "--text-encoding",
-        metavar="NAME",
-        help=(
-            "Force the text-file encoding. Default: auto-detect from common encodings "
-            "(utf-8, utf-8-sig, cp932, shift_jis, euc_jp, gbk)."
-        ),
     )
 
     # --- Mode ---
@@ -136,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode_group.add_argument(
         "--gui",
         action="store_true",
-        help="Launch the Gradio web interface instead of running in CLI mode.",
+        help="Launch the Gradio web interface (default behavior).",
     )
     mode_group.add_argument(
         "--port",
@@ -171,39 +128,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="LLM sampling temperature 0.0–1.0 (default: 0.7).",
     )
 
-    # --- Workflow ---
-    workflow_group = parser.add_argument_group("Workflow")
-    workflow_group.add_argument(
-        "--max-revisions",
-        type=int,
-        metavar="N",
-        help="Maximum composer→validator revision loops (default: 3).",
-    )
-    workflow_group.add_argument(
-        "--min-score",
-        type=float,
-        metavar="FLOAT",
-        help="Minimum validator quality score to accept output, 0.0–1.0 (default: 0.75).",
-    )
-    workflow_group.add_argument(
-        "--session-id",
-        metavar="ID",
-        help="Custom session ID for this run (used in memory logs).",
-    )
-
-    # --- Output ---
-    output_group = parser.add_argument_group("Output")
-    output_group.add_argument(
-        "--json",
-        action="store_true",
-        help="Print the full pipeline result as JSON instead of plain text.",
-    )
-    output_group.add_argument(
-        "--output", "-o",
-        metavar="FILE",
-        help="Write the lyrics (or JSON result) to a file instead of stdout.",
-    )
-
     # --- Misc ---
     parser.add_argument(
         "--verbose", "-v",
@@ -231,10 +155,6 @@ def _apply_cli_overrides(args: argparse.Namespace) -> None:
         os.environ["OLLAMA_BASE_URL"] = args.base_url
     if args.temperature is not None:
         os.environ["LLM_TEMPERATURE"] = str(args.temperature)
-    if args.max_revisions is not None:
-        os.environ["MAX_REVISION_LOOPS"] = str(args.max_revisions)
-    if args.min_score is not None:
-        os.environ["MIN_QUALITY_SCORE"] = str(args.min_score)
 
 
 # ---------------------------------------------------------------------------
@@ -505,68 +425,21 @@ def main() -> int:
     # Configure logging first
     _setup_logging(verbose=args.verbose)
 
-    # --- GUI mode ---
-    if args.gui:
-        from gui.app import create_ui
-
-        app = create_ui()
-        app.launch(
-            server_name="0.0.0.0",
-            server_port=args.port,
-            share=False,
-            show_error=True,
-        )
-        return 0
-
     # Apply CLI overrides to environment variables
     _apply_cli_overrides(args)
 
-    # --- Validate arguments ---
-    if not args.interactive:
-        if not args.midi:
-            parser.error(
-                "Argument --midi is required in non-interactive mode. "
-                "Use --interactive for a prompt-based session."
-            )
-        if args.text and args.text_file:
-            parser.error("Use either --text or --text-file, not both.")
-        if not args.text and not args.text_file:
-            parser.error(
-                "Argument --text or --text-file is required in non-interactive mode. "
-                "Use --interactive for a prompt-based session."
-            )
+    # CLI is now GUI-first. Keep --gui as a compatibility flag, but launch
+    # Gradio regardless so `python src/main.py` just works.
+    from gui.app import create_ui
 
-    reference_text = args.text
-    if args.text_file:
-        try:
-            reference_text = _read_text_file(args.text_file, args.text_encoding).strip()
-        except Exception as exc:  # noqa: BLE001
-            parser.error(f"Failed to read --text-file: {exc}")
-
-    # --- Dispatch ---
-    try:
-        if args.interactive:
-            exit_code = asyncio.run(
-                run_interactive(
-                    as_json=args.json,
-                    output_file=args.output,
-                )
-            )
-        else:
-            exit_code = asyncio.run(
-                run_pipeline(
-                    midi_path=args.midi,
-                    reference_text=reference_text,
-                    session_id=args.session_id,
-                    as_json=args.json,
-                    output_file=args.output,
-                )
-            )
-    except KeyboardInterrupt:
-        print("\n[Interrupted]", file=sys.stderr)
-        exit_code = 130  # standard shell interrupt exit code
-
-    return exit_code
+    app = create_ui()
+    app.launch(
+        server_name="0.0.0.0",
+        server_port=args.port,
+        share=False,
+        show_error=True,
+    )
+    return 0
 
 
 if __name__ == "__main__":

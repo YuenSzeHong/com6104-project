@@ -19,6 +19,26 @@ from .progress import PipelineProgress
 logger = logging.getLogger("gui.pipeline")
 
 
+def _format_activity_panel(
+    events: list[dict[str, str]],
+    status: str,
+) -> str:
+    """Render a compact real-time activity panel from orchestrator events."""
+    lines = [f"### Activity ({status})"]
+    if not events:
+        lines.append("- Waiting for agent events...")
+        return "\n".join(lines)
+
+    lines.append("| Time | Event | Details |")
+    lines.append("|---|---|---|")
+    for item in events[-12:]:
+        ts = item.get("time", "")
+        typ = item.get("type", "")
+        detail = item.get("detail", "")[:120]
+        lines.append(f"| {ts} | {typ} | {detail} |")
+    return "\n".join(lines)
+
+
 def read_text_file(path: str, encoding: str | None = None) -> str:
     """Read a text file with encoding auto-detection."""
     file_path = Path(path)
@@ -103,7 +123,7 @@ async def run_pipeline_with_progress(
     reference_text: str,
     text_file: str | None = None,
     session_id: str | None = None,
-) -> AsyncGenerator[tuple[str, str, str], None]:
+) -> AsyncGenerator[tuple[str, str, str, str], None]:
     """
     Run the pipeline and yield progress updates.
 
@@ -120,7 +140,7 @@ async def run_pipeline_with_progress(
 
     Yields
     ------
-    (progress_markdown, lyrics_text, conversation_log) tuples
+    (progress_markdown, lyrics_text, activity_panel, conversation_log) tuples
     """
     # Resolve text input
     if text_file:
@@ -130,6 +150,7 @@ async def run_pipeline_with_progress(
             yield (
                 f"## ❌ Error\n\nFailed to read text file: {e}",
                 "",
+                "### Activity (error)\n- Failed to read text file",
                 "",
             )
             return
@@ -138,6 +159,7 @@ async def run_pipeline_with_progress(
         yield (
             "## ⚠️ Warning\n\nNo reference text provided.",
             "",
+            "### Activity (warning)\n- Missing reference text",
             "",
         )
         return
@@ -169,9 +191,15 @@ async def run_pipeline_with_progress(
         progress.add_step(step_labels[key])
 
     latest_lyrics = ""
+    recent_events: list[dict[str, str]] = []
 
     # Yield initial state
-    yield progress.format_progress(), "", "*Waiting for pipeline to start...*"
+    yield (
+        progress.format_progress(),
+        "",
+        _format_activity_panel(recent_events, "running"),
+        "*Waiting for pipeline to start...*",
+    )
 
     try:
         async with AgentOrchestrator(session_id=session_id) as orch:
@@ -191,6 +219,7 @@ async def run_pipeline_with_progress(
 
             last_emit_at = 0.0
             last_progress_md = ""
+            last_activity_md = ""
             last_conversation_md = ""
             last_lyrics_emitted = ""
 
@@ -202,6 +231,16 @@ async def run_pipeline_with_progress(
                     ev_type = str(event.get("type", ""))
                     ev_step = str(event.get("step", ""))
                     ev_message = str(event.get("message", ""))
+
+                    recent_events.append(
+                        {
+                            "time": time.strftime("%H:%M:%S"),
+                            "type": ev_type or "event",
+                            "detail": ev_message or ev_step or "-",
+                        }
+                    )
+                    if len(recent_events) > 40:
+                        recent_events = recent_events[-40:]
 
                     if ev_type == "run_started":
                         progress.overall_status = "running"
@@ -239,9 +278,13 @@ async def run_pipeline_with_progress(
 
                 if should_emit:
                     progress_md = progress.format_progress()
+                    activity_md = _format_activity_panel(
+                        recent_events, progress.overall_status
+                    )
                     conversation_md = _format_conversation_log(memory)
                     has_delta = (
                         progress_md != last_progress_md
+                        or activity_md != last_activity_md
                         or conversation_md != last_conversation_md
                         or latest_lyrics != last_lyrics_emitted
                     )
@@ -249,12 +292,14 @@ async def run_pipeline_with_progress(
                     if has_delta or drained:
                         last_emit_at = now
                         last_progress_md = progress_md
+                        last_activity_md = activity_md
                         last_conversation_md = conversation_md
                         last_lyrics_emitted = latest_lyrics
 
                         yield (
                             progress_md,
                             latest_lyrics,
+                            activity_md,
                             conversation_md,
                         )
                     else:
@@ -271,6 +316,7 @@ async def run_pipeline_with_progress(
             yield (
                 progress.format_progress(),
                 latest_lyrics,
+                _format_activity_panel(recent_events, progress.overall_status),
                 _format_conversation_log(memory),
             )
 
@@ -278,4 +324,9 @@ async def run_pipeline_with_progress(
         logger.exception("Pipeline error: %s", exc)
         progress.overall_status = "error"
         progress.error_message = str(exc)
-        yield progress.format_progress(), f"Error: {exc}", f"**Error:** {exc}"
+        yield (
+            progress.format_progress(),
+            f"Error: {exc}",
+            _format_activity_panel(recent_events, "error"),
+            f"**Error:** {exc}",
+        )

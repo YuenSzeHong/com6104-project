@@ -39,6 +39,7 @@ AI-powered Cantonese lyrics generation from MIDI melodies.
                 (
                     progress_output,
                     lyrics_output,
+                    activity_log,
                     conversation_log,
                     save_btn,
                     save_path,
@@ -51,7 +52,7 @@ AI-powered Cantonese lyrics generation from MIDI melodies.
         run_btn.click(
             fn=run_pipeline_with_progress,
             inputs=[midi_input, text_input, text_file_input, session_id_input],
-            outputs=[progress_output, lyrics_output, conversation_log],
+            outputs=[progress_output, lyrics_output, activity_log, conversation_log],
         )
 
         save_btn.click(

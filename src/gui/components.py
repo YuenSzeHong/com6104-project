@@ -48,13 +48,13 @@ def build_input_panel() -> tuple[gr.File, gr.Textbox, gr.File, gr.Textbox, gr.Bu
 
 
 def build_output_panel() -> tuple[
-    gr.Markdown, gr.Textbox, gr.Markdown, gr.Button, gr.Textbox
+    gr.Markdown, gr.Textbox, gr.Markdown, gr.Markdown, gr.Button, gr.Textbox
 ]:
     """Build the right-column output panel.
 
     Returns
     -------
-    (progress_output, lyrics_output, conversation_log, save_btn, save_path)
+    (progress_output, lyrics_output, activity_log, conversation_log, save_btn, save_path)
     """
     gr.Markdown("### 📊 Progress")
 
@@ -70,6 +70,12 @@ def build_output_panel() -> tuple[
         interactive=False,
     )
 
+    gr.Markdown("### 📡 Live Activity")
+
+    activity_log = gr.Markdown(
+        value="*Recent agent activity will stream here in real time.*",
+    )
+
     gr.Markdown("### 💬 Agent Conversation Log")
 
     conversation_log = gr.Markdown(
@@ -83,4 +89,11 @@ def build_output_panel() -> tuple[
         placeholder="Leave empty to save next to MIDI file",
     )
 
-    return progress_output, lyrics_output, conversation_log, save_btn, save_path
+    return (
+        progress_output,
+        lyrics_output,
+        activity_log,
+        conversation_log,
+        save_btn,
+        save_path,
+    )

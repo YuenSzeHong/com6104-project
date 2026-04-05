@@ -54,6 +54,15 @@ flowchart TD
 | 4 | `lyrics-composer` Agent | 将外语/现有歌词改写为可唱的粤语，或从零创作 |
 | 5 | `validator` Agent | 评估当前粤语改编质量，必要时请求修订 |
 
+### 性能说明
+
+当前最明显的延迟点在“选字”阶段，而不是 MIDI 分析或 0243 候选查询。现在的实现已经把这部分做了两层优化：
+
+- `lyrics-composer` 会用隔离的记忆快照并发执行符合条件的选字请求，不再按位置逐个阻塞等待。
+- GUI 新增了实时活动面板，可以在流水线运行时看到 Agent 事件流。
+
+如果需要继续调优选字吞吐，可以查看 `src/agent/orchestrator.py` 里的 `WORD_SELECTOR_*` 环境变量。
+
 ## 🛠️ 技术栈
 
 | 组件 | 技术 |
@@ -121,24 +130,26 @@ Copy-Item .env.example .env
 ollama pull qwen3.5:4b
 ```
 
-### 运行一次
+### 启动 Gradio（主要用法）
 
 ```bash
-python src/main.py --midi path/to/song.mid --text "source lyric or theme text"
+python src/main.py --gui
 ```
 
-### 或覆盖配置（PowerShell 一次性运行）
+### 自定义端口启动 Gradio
+
+```bash
+python src/main.py --gui --port 7861
+```
+
+### 或覆盖配置（PowerShell）
 
 ```powershell
 $env:LLM_PROVIDER = "lmstudio"
-python src/main.py --midi path/to/song.mid --text-file test/lyrics/ドラえもんのうた.clean.txt
+python src/main.py --gui
 ```
 
-### 交互式模式
-
-```bash
-python src/main.py --interactive
-```
+说明：当前命令行入口主要用于启动 Gradio，旧的 interactive CLI 模式不再是主要工作流。
 
 ## ⚙️ 环境变量
 
