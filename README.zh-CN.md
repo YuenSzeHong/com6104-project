@@ -157,14 +157,14 @@ python src/main.py --gui
 
 | 变量 | 默认值 | 作用 |
 |----------|---------|------|
-| `LLM_PROVIDER` | `lmstudio` | LLM 提供者：`ollama` 或 `lmstudio` |
+| `LLM_PROVIDER` | `lmstudio` | LLM 提供者：`ollama`、`ollama-cloud` 或 `lmstudio` |
 | `OLLAMA_MODEL` | `qwen3.5:4b` | Ollama 模型名称 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 服务地址 |
 | `LMSTUDIO_MODEL` | `qwen3.5-4b@q4_k_m` | LM Studio 模型名称 |
 | `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio API 基础地址 |
 | `LLM_TEMPERATURE` | `0.7` | 采样温度 |
 | `LLM_CTX` | `8192` | 上下文窗口大小 |
-| `MAX_REVISION_LOOPS` | `3` | 最大修订轮数 |
+| `MAX_REVISION_LOOPS` | `3` | 首稿之后的最大修订轮数（总尝试次数 = `1 + MAX_REVISION_LOOPS`） |
 | `MIN_QUALITY_SCORE` | `0.75` | 最低接受评分 |
 | `MEMORY_MAX_TURNS` | `20` | 滑动窗口记忆大小 |
 

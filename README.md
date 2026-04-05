@@ -186,14 +186,14 @@ The app automatically loads `.env` from the repository root. Shell variables and
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LLM_PROVIDER` | `lmstudio` | LLM provider: `ollama` or `lmstudio` |
+| `LLM_PROVIDER` | `lmstudio` | LLM provider: `ollama`, `ollama-cloud`, or `lmstudio` |
 | `OLLAMA_MODEL` | `qwen3.5:4b` | Ollama model name |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `LMSTUDIO_MODEL` | `qwen3.5-4b@q4_k_m` | LM Studio model name |
 | `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio API base URL |
 | `LLM_TEMPERATURE` | `0.7` | Sampling temperature |
 | `LLM_CTX` | `8192` | Context window size |
-| `MAX_REVISION_LOOPS` | `3` | Maximum rewrite rounds |
+| `MAX_REVISION_LOOPS` | `3` | Maximum revision rounds after the first draft (total attempts = `1 + MAX_REVISION_LOOPS`) |
 | `MIN_QUALITY_SCORE` | `0.75` | Minimum acceptance score |
 | `MEMORY_MAX_TURNS` | `20` | Sliding-window memory size |
 
