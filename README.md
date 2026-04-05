@@ -51,6 +51,15 @@ flowchart TD
 | 4 | `lyrics-composer` agent | Rewrite a foreign/existing lyric into singable Cantonese, or write from a theme |
 | 5 | `validator` agent | Evaluate the current Cantonese adaptation and request revisions if needed |
 
+### Performance Notes
+
+The main latency bottleneck is the word-selection stage, not MIDI analysis or 0243 candidate lookup. The current implementation reduces that cost in two ways:
+
+- `lyrics-composer` now runs eligible word-selection requests concurrently using isolated memory snapshots instead of waiting for each position serially.
+- The GUI includes a live activity panel so you can see agent events stream while the pipeline is running.
+
+If you want to tune selection throughput further, the relevant knobs are the `WORD_SELECTOR_*` environment variables in `src/agent/orchestrator.py`.
+
 ### LLM Providers
 
 | Provider | Config | Notes |
@@ -128,19 +137,48 @@ cp .env.example .env
 # Pull the model for Ollama
 ollama pull qwen3.5:4b
 
-# Run once
-python src/main.py --midi path/to/song.mid --text "source lyric or theme text"
+# Launch Gradio UI (primary usage)
+python src/main.py --gui
 
-# Or override in PowerShell for a one-off run
+# Launch Gradio UI on a custom port
+python src/main.py --gui --port 7861
+
+# Optional: override provider before launching GUI (PowerShell)
 $env:LLM_PROVIDER = "lmstudio"
-python src/main.py --midi path/to/song.mid --text-file test/lyrics/ドラえもんのうた.clean.txt
+python src/main.py --gui
 ```
 
-For interactive mode:
+### Hatch + uv Workflow
+
+This project supports using Hatch in a uv-backed mode (similar to yt-dlp style workflows):
 
 ```bash
-python src/main.py --interactive
+# Install dev dependencies in Hatch default env (uses installer = "uv")
+hatch env create
+
+# Run checks
+hatch run lint
+hatch run type
+hatch run check
+
+# Run tests (pytest, no devscripts wrapper)
+hatch run test
+
+# Format (yt-dlp-like style pipeline)
+hatch run fmt
+
+# Install pre-commit hook
+hatch run precommit-install
 ```
+
+Notes:
+
+- Hatch and uv are compatible in this setup.
+- `uv sync` continues to work as before; Hatch is an additional runner layer.
+- We intentionally use `pytest` directly instead of a custom `devscripts.run_tests` wrapper.
+
+Note: the CLI entrypoint is currently used mainly to start Gradio. The old
+interactive CLI mode is no longer the primary workflow.
 
 ### Environment Variables
 

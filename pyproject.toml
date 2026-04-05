@@ -42,6 +42,32 @@ dev = [
     "bs4>=0.0.2",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "ruff>=0.12.0",
+    "ty>=0.0.1a0",
+    "autopep8>=2.3.2",
+    "pre-commit>=4.3.0",
+]
+
+[tool.hatch.envs.default]
+installer = "uv"
+dependency-groups = ["dev"]
+
+[tool.hatch.envs.default.scripts]
+lint = "ruff check ."
+check-style = [
+    "ruff check .",
+    "autopep8 --diff --recursive .",
+]
+fmt = [
+    "ruff check --fix .",
+    "autopep8 --in-place --recursive .",
+]
+type = "ty check ."
+test = "pytest -q"
+precommit-install = "pre-commit install"
+check = [
+    "check-style",
+    "type",
 ]
 
 [tool.pytest.ini_options]
