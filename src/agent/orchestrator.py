@@ -23,6 +23,7 @@ Usage
             result = await orch.run(
                 midi_path="song.mid",
                 reference_text="青山依舊在，幾度夕陽紅",
+                reference_text_kind="theme",
             )
             print(result.lyrics)
 
@@ -239,6 +240,7 @@ class AgentOrchestrator:
         self,
         midi_path: str | Path,
         reference_text: str,
+        reference_text_kind: str = "theme",
         event_callback: PipelineEventCallback | None = None,
     ) -> PipelineResult:
         """
@@ -277,6 +279,7 @@ class AgentOrchestrator:
         ----------
         midi_path      : MIDI 文件路径
         reference_text : 参考文本 / 创作意境（中文）
+        reference_text_kind : 参考文本类型（theme / original_lyrics）
 
         Returns
         -------
@@ -292,17 +295,21 @@ class AgentOrchestrator:
         self._pipeline_state = _STATE_STARTING
 
         logger.info("流水线开始 – midi=%s | text='%s'", midi_path, reference_text[:60])
+        logger.info("参考文本类型 – %s", reference_text_kind)
         await self._emit_event(
             event_callback,
             {
                 "type": "run_started",
                 "session_id": self._memory.session_id,
                 "midi_path": str(midi_path),
+                "reference_text_kind": reference_text_kind,
             },
         )
 
         self._memory.set_artifact("source_text", reference_text)
+        self._memory.set_artifact("source_text_kind", reference_text_kind)
         self._memory.set_pipeline_value("current_midi_path", str(midi_path))
+        self._memory.set_pipeline_value("reference_text_kind", reference_text_kind)
         self._memory.set_run_status(
             stage="starting",
             accepted=False,
@@ -325,21 +332,13 @@ class AgentOrchestrator:
             self._transition_state(_STATE_MIDI_ANALYSIS)
             logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
 
-            # 并行调用 MIDI analyzer 的三个工具
+            # 并行调用 MIDI analyzer 的两个工具
             midi_task = self._call_tool_direct_safe(
                 server_name="midi-analyzer",
                 tool_name="analyze_midi",
                 args={"file_path": str(midi_path)},
                 parse_json=True,
                 default={},
-                event_callback=event_callback,
-            )
-            durations_task = self._call_tool_direct_safe(
-                server_name="midi-analyzer",
-                tool_name="get_syllable_durations",
-                args={"file_path": str(midi_path)},
-                parse_json=True,
-                default=[],
                 event_callback=event_callback,
             )
             rhyme_task = self._call_tool_direct_safe(
@@ -352,9 +351,8 @@ class AgentOrchestrator:
             )
 
             # 等待所有任务完成
-            midi_analysis, durations, rhyme_positions_raw = await asyncio.gather(
+            midi_analysis, rhyme_positions_raw = await asyncio.gather(
                 midi_task,
-                durations_task,
                 rhyme_task,
                 return_exceptions=True,
             )
@@ -363,9 +361,7 @@ class AgentOrchestrator:
             result.midi_analysis = (
                 midi_analysis if isinstance(midi_analysis, dict) else {}
             )
-            result.midi_analysis["syllable_durations"] = (
-                durations if isinstance(durations, list) else []
-            )
+            result.midi_analysis.setdefault("syllable_durations", [])
             rhyme_positions: list[int] = (
                 rhyme_positions_raw if isinstance(rhyme_positions_raw, list) else []
             )
@@ -677,6 +673,7 @@ class AgentOrchestrator:
                 # --- 歌词创作（LLM 代理）---
                 compose_task = self._build_compose_task(
                     reference_text=reference_text,
+                    reference_text_kind=reference_text_kind,
                     syllable_count=syllable_count,
                     revision_instructions=revision_instructions,
                     attempt=attempt,
@@ -764,6 +761,7 @@ class AgentOrchestrator:
                     strong_beats=strong_beats,
                     rhyme_positions=rhyme_positions,
                     reference_text=reference_text,
+                    reference_text_kind=reference_text_kind,
                 )
                 validation_output = await self._run_agent(
                     agent_name="validator",
@@ -1706,6 +1704,7 @@ class AgentOrchestrator:
     def _build_compose_task(
         self,
         reference_text: str,
+        reference_text_kind: str,
         syllable_count: int,
         revision_instructions: str,
         attempt: int,
@@ -1723,6 +1722,9 @@ class AgentOrchestrator:
         embedded_lyrics_source = midi_analysis.get("embedded_lyrics_source")
         embedded_lyrics_preview = midi_analysis.get("embedded_lyrics_preview", [])
         embedded_lyric_unit_count = midi_analysis.get("embedded_lyric_unit_count", 0)
+        syllable_durations = midi_analysis.get("note_durations") or midi_analysis.get(
+            "syllable_durations", []
+        )
         effective_syllable_count_source = midi_analysis.get(
             "effective_syllable_count_source", "melody_notes"
         )
@@ -1751,11 +1753,23 @@ class AgentOrchestrator:
             " ".join(str(unit) for unit in embedded_lyrics_preview[:32])
             if embedded_lyrics_preview else "（无）"
         )
+        duration_str = (
+            " ".join(
+                f"{float(duration):.3f}"
+                for duration in syllable_durations[:syllable_count]
+            )
+            if syllable_durations
+            else "（无）"
+        )
 
         base = self._render_prompt_template(
             "compose-task.md",
             syllable_count=syllable_count,
             reference_text=reference_text,
+            reference_text_kind=reference_text_kind,
+            reference_text_kind_label=self._reference_text_kind_label(
+                reference_text_kind
+            ),
             embedded_lyrics_source=embedded_lyrics_source or "（无）",
             embedded_lyric_unit_count=embedded_lyric_unit_count,
             effective_syllable_count_source=effective_syllable_count_source,
@@ -1764,6 +1778,7 @@ class AgentOrchestrator:
             key=midi_analysis.get("key", "?"),
             strong_str=strong_str,
             rhyme_str=rhyme_str,
+            syllable_durations_str=duration_str,
             melody_tone_seq_str=melody_tone_seq_str,
             selected_jp=selected_jp or "（未查询到）",
             reference_tone_seq_str=reference_tone_seq_str,
@@ -1785,6 +1800,7 @@ class AgentOrchestrator:
         strong_beats: list[int],
         rhyme_positions: list[int],
         reference_text: str,
+        reference_text_kind: str,
     ) -> str:
         """构建校验代理的任务提示，包含所有必要参数供其调用 MCP 工具。"""
         midi_analysis = self._memory.get_pipeline_value("midi_analysis", {})
@@ -1797,6 +1813,9 @@ class AgentOrchestrator:
         embedded_lyrics_source = midi_analysis.get("embedded_lyrics_source")
         embedded_lyrics_preview = midi_analysis.get("embedded_lyrics_preview", [])
         embedded_lyric_unit_count = midi_analysis.get("embedded_lyric_unit_count", 0)
+        syllable_durations = midi_analysis.get("note_durations") or midi_analysis.get(
+            "syllable_durations", []
+        )
         effective_syllable_count_source = midi_analysis.get(
             "effective_syllable_count_source", "melody_notes"
         )
@@ -1804,20 +1823,34 @@ class AgentOrchestrator:
             " ".join(str(unit) for unit in embedded_lyrics_preview[:24])
             if embedded_lyrics_preview else "（无）"
         )
+        duration_str = (
+            " ".join(
+                f"{float(duration):.3f}"
+                for duration in syllable_durations[:syllable_count]
+            )
+            if syllable_durations
+            else "（无）"
+        )
 
         return self._render_prompt_template(
             "validate-task.md",
             draft_lyrics=draft_lyrics,
-            draft_jyutping=draft_jyutping or "（创作代理未提供，请调用 chinese_to_jyutping 获取）",
+            draft_jyutping=draft_jyutping
+            or "（创作代理未提供，请调用 chinese_to_jyutping 获取）",
             syllable_count=syllable_count,
             tone_seq_str=tone_seq_str,
             strong_str=strong_str,
             rhyme_str=rhyme_str,
             reference_text=reference_text,
+            reference_text_kind=reference_text_kind,
+            reference_text_kind_label=self._reference_text_kind_label(
+                reference_text_kind
+            ),
             embedded_lyrics_source=embedded_lyrics_source or "（无）",
             embedded_lyric_unit_count=embedded_lyric_unit_count,
             effective_syllable_count_source=effective_syllable_count_source,
             embedded_lyrics_str=embedded_lyrics_str,
+            syllable_durations_str=duration_str,
             tone_json=tone_json,
             strong_json=strong_json,
             rhyme_json=rhyme_json,
@@ -1830,6 +1863,12 @@ class AgentOrchestrator:
         if not template_path.exists():
             template_path = PROMPTS_DIR / template_name
         return template_path.read_text(encoding="utf-8").format(**kwargs).strip()
+
+    @staticmethod
+    def _reference_text_kind_label(reference_text_kind: str) -> str:
+        if reference_text_kind == "original_lyrics":
+            return "原歌词"
+        return "主题灵感"
 
     # ------------------------------------------------------------------
     # Internal: LLM builder

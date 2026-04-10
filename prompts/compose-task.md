@@ -1,7 +1,11 @@
 请创作恰好 {syllable_count} 个音节的粤语歌词。
 
+参考文本类型：{reference_text_kind_label}
+
 参考文本 / 创作意境：
 {reference_text}
+
+说明：如果参考文本类型是 原歌词，请将其视为已有原歌词或原文，尽量保留其叙事与意境；如果是 主题灵感，请将其视为创作灵感，不要逐句复述。
 
 MIDI 内嵌歌词线索：
   来源：{embedded_lyrics_source}
@@ -14,6 +18,7 @@ MIDI 内嵌歌词线索：
   调性：{key}
   强拍位置（音节索引）：{strong_str}
   押韵位置（音节索引）：{rhyme_str}
+  音符时值（秒，按顺序）：{syllable_durations_str}
 
 0243 旋律目标：
   lean 0243 序列：{melody_tone_seq_str}

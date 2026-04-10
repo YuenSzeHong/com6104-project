@@ -11,7 +11,11 @@
   预期 lean 0243 序列：{tone_seq_str}
   强拍位置：{strong_str}
   押韵位置：{rhyme_str}
+  音符时值（秒，按顺序）：{syllable_durations_str}
+  参考文本类型：{reference_text_kind_label}
   参考文本：{reference_text}
+
+说明：如果参考文本类型是 原歌词，请按“原歌词 / 原文”理解并核对是否过度贴近原句；如果是 主题灵感，请按“主题意图 / 创作方向”理解，不要求逐句对应。
 
 【MIDI 内嵌歌词线索】
   来源：{embedded_lyrics_source}
