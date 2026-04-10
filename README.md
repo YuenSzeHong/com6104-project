@@ -8,7 +8,9 @@
 
 ## Project Overview
 
-This is a **Cantonese lyric adaptation and songwriting system** built on a multi-agent AI architecture. Its primary use case is to turn a foreign-language song or an existing lyric into a singable Cantonese version. If no original lyric is provided, it can also write from a theme or scenario. Users provide a MIDI melody file together with a source lyric or theme text; the system analyses the melody structure and produces Cantonese lyrics that fit pronunciation, lean 0243 melody constraints, and rhyme.
+This is a **Cantonese lyric adaptation and songwriting system** built on a multi-agent AI architecture. Its primary use case is to turn a foreign-language song or an existing lyric into a singable Cantonese version. If no original lyric is provided, it can also write from a theme or scenario. Users provide a MIDI melody file together with either an original lyric/source-text file or a theme/idea note; the system analyses the melody structure and produces Cantonese lyrics that fit pronunciation, lean 0243 melody constraints, and rhyme.
+
+The current UI is **GUI-first** and is designed to stay readable during long runs: it uses the default Gradio look, a two-column input/output layout, a separate agent-status panel, and expandable activity/conversation sections for details on demand.
 
 ### Architecture
 
@@ -50,6 +52,8 @@ flowchart TD
 | 3    | `jyutping` MCP server      | Convert candidate text, continue phrases, and query constrained words           |
 | 4    | `lyrics-composer` agent    | Rewrite a foreign/existing lyric into singable Cantonese, or write from a theme |
 | 5    | `validator` agent          | Evaluate the current Cantonese adaptation and request revisions if needed       |
+
+The composer and validator prompts now also distinguish whether the reference text is an original lyric/source text or just a theme/idea, so the model does not treat both cases the same way.
 
 ### Performance Notes
 
@@ -138,14 +142,17 @@ cp .env.example .env
 ollama pull qwen3.5:4b
 
 # Launch Gradio UI (primary usage)
-python src/main.py --gui
+python src/main.py
+
+# Or launch via Gradio CLI
+gradio src/main.py
 
 # Launch Gradio UI on a custom port
-python src/main.py --gui --port 7861
+python src/main.py --port 7861
 
 # Optional: override provider before launching GUI (PowerShell)
 $env:LLM_PROVIDER = "lmstudio"
-python src/main.py --gui
+python src/main.py
 ```
 
 ### Build and Development
@@ -177,8 +184,8 @@ Notes:
 - `uv sync` works independently for direct dependency management.
 - Tests run via pytest directly.
 
-Note: the CLI entrypoint is currently used mainly to start Gradio. The old
-interactive CLI mode is no longer the primary workflow.
+Note: the CLI entrypoint now launches Gradio by default. The old interactive
+CLI mode is no longer the primary workflow.
 
 ### Environment Variables
 
@@ -197,6 +204,8 @@ The app automatically loads `.env` from the repository root. Shell variables and
 | `MIN_QUALITY_SCORE`  | `0.75`                     | Minimum acceptance score                                                                  |
 | `MEMORY_MAX_TURNS`   | `20`                       | Sliding-window memory size                                                                |
 
+The GUI now also records whether the text input is an `original_lyrics` source or a `theme` / idea note, and passes that through to the composer and validator prompts.
+
 ---
 
 ### Prompt System
@@ -205,9 +214,11 @@ All prompt files live under `prompts/` and are currently authored in Chinese bec
 
 | File                         | Used By           | Purpose                                  |
 | ---------------------------- | ----------------- | ---------------------------------------- |
-| `prompts/system.md`          | shared            | Shared singing, tone, and output rules   |
-| `prompts/lyrics-composer.md` | `lyrics-composer` | Adaptation and rewrite guidance          |
-| `prompts/validator.md`       | `validator`       | Acceptance scoring and revision guidance |
+| `prompts/system.md`                     | shared            | Shared singing, tone, and output rules   |
+| `prompts/compose-task.md`               | orchestrator      | First-draft composition prompt           |
+| `prompts/agents/lyrics-composer-task.md` | `lyrics-composer` | Adaptation and rewrite guidance          |
+| `prompts/agents/lyrics-composer-revision-task.md` | `lyrics-composer` | Revision prompt with validator feedback |
+| `prompts/agents/validate-task.md`       | `validator`       | Acceptance scoring and revision guidance |
 
 Prompt loading priority:
 

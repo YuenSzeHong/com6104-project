@@ -6,7 +6,9 @@
 
 ## 📖 项目简介
 
-本项目是一个基于 Agentic AI 架构的粤语填词改编系统。主用途是把外语歌或现有歌词改编成可唱的粤语版本；如果用户没有提供原歌词，也可以只给主题、情景或意境文本，让系统进行原创填词。
+本项目是一个基于 Agentic AI 架构的粤语填词改编系统。主用途是把外语歌或现有歌词改编成可唱的粤语版本；如果用户没有提供原歌词，也可以只给主题、情景或意境文本，让系统进行原创填词。当前输入会明确区分“原歌词/原文”和“主题/灵感”，并把这个信息传给填词与校验提示词。
+
+当前界面是 **GUI-first**：使用默认 Gradio 样式，左右两栏分别放输入与输出，另外有独立的 Agent 状态、活动流和对话日志，方便在长流程里按需展开细节。
 
 输入为 MIDI 旋律文件与来源歌词/主题文本，系统会：
 
@@ -54,6 +56,8 @@ flowchart TD
 | 3    | `jyutping` MCP 服务      | 转换候选文本、延续词组、查询受限词汇        |
 | 4    | `lyrics-composer` Agent  | 将外语/现有歌词改写为可唱的粤语，或从零创作 |
 | 5    | `validator` Agent        | 评估当前粤语改编质量，必要时请求修订        |
+
+`lyrics-composer` 和 `validator` 的提示词现在会明确说明参考文本是“原歌词”还是“主题灵感”，避免模型把两种输入当成同一类内容。
 
 ### 性能说明
 
@@ -134,23 +138,23 @@ ollama pull qwen3.5:4b
 ### 启动 Gradio（主要用法）
 
 ```bash
-python src/main.py --gui
+python src/main.py
 ```
 
 ### 自定义端口启动 Gradio
 
 ```bash
-python src/main.py --gui --port 7861
+python src/main.py --port 7861
 ```
 
 ### 或覆盖配置（PowerShell）
 
 ```powershell
 $env:LLM_PROVIDER = "lmstudio"
-python src/main.py --gui
+python src/main.py
 ```
 
-说明：当前命令行入口主要用于启动 Gradio，旧的 interactive CLI 模式不再是主要工作流。
+说明：当前命令行入口默认直接启动 Gradio，旧的 interactive CLI 模式不再是主要工作流。
 
 ## ⚙️ 环境变量
 
@@ -169,15 +173,19 @@ python src/main.py --gui
 | `MIN_QUALITY_SCORE`  | `0.75`                     | 最低接受评分                                                    |
 | `MEMORY_MAX_TURNS`   | `20`                       | 滑动窗口记忆大小                                                |
 
+GUI 会把参考文本标记为 `original_lyrics` 或 `theme`，并将这个标记传给 composer / validator 提示词。
+
 ## 📋 提示词系统
 
 所有提示词文件位于 `prompts/` 目录，使用中文编写，因为目标歌词生成任务和模型提示最适合用中文。
 
 | 文件                         | 使用者            | 作用                     |
 | ---------------------------- | ----------------- | ------------------------ |
-| `prompts/system.md`          | 共享              | 共享演唱、音调和输出规则 |
-| `prompts/lyrics-composer.md` | `lyrics-composer` | 改编和改写指导           |
-| `prompts/validator.md`       | `validator`       | 接受度评分和修订指导     |
+| `prompts/system.md`                      | 共享              | 共享演唱、音调和输出规则   |
+| `prompts/compose-task.md`                | orchestrator      | 首稿填词提示词             |
+| `prompts/agents/lyrics-composer-task.md` | `lyrics-composer` | 改编和改写指导             |
+| `prompts/agents/lyrics-composer-revision-task.md` | `lyrics-composer` | 修订提示词 |
+| `prompts/agents/validate-task.md`        | `validator`       | 接受度评分和修订指导       |
 
 **提示词加载优先级：**
 
