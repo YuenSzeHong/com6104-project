@@ -43,6 +43,12 @@ Rules:
 - Phrase-final positions should cadence naturally
 - Rhyming syllables must share the same Jyutping final vowel/coda
 
+返回前的最终检查：
+
+- 先自行统计草稿音节数。
+- 如果总数不等于 **{syllable_count}**，先修改草稿再输出 JSON。
+- 不要返回仍然存在音节数不一致的草稿。
+
 ---
 
 ### 4. Output Format

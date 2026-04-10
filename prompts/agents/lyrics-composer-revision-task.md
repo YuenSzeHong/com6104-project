@@ -36,6 +36,7 @@ Jyutping:
 2. Keep improvements from the previous draft where they already satisfy constraints.
 3. Do **not** simply paraphrase the previous draft – make genuine corrections.
 4. Ensure the total syllable count equals **{syllable_count}** exactly.
+5. 返回前再统计一次音节数，如有不一致，先修正再输出。
 
 ### Output Format
 Return a **JSON object only**:
