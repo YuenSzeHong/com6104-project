@@ -735,6 +735,9 @@ def analyze_midi(file_path: str) -> str:
             is_xf=is_xf,
             xf_melody_channel=xf_melody_channel,
         )
+        syllable_durations = [
+            round(float(note["duration_sec"]), 4) for note in melody_notes
+        ]
         note_syllable_count = len(melody_notes)
         effective_syllable_count = (
             len(embedded_lyrics) if embedded_lyrics else note_syllable_count
@@ -778,6 +781,8 @@ def analyze_midi(file_path: str) -> str:
             "xf_melody_channel": xf_melody_channel,
             "melody_channel": melody_channel,
             "melody_selection_reason": selection_reason,
+            "note_durations": syllable_durations,
+            "syllable_durations": syllable_durations,
             "embedded_lyrics_source": embedded_source,
             "embedded_lyric_unit_count": len(embedded_lyrics),
             "embedded_lyrics_preview": embedded_lyrics[:16],

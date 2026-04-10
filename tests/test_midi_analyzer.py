@@ -57,6 +57,9 @@ async def test_analyze_midi_returns_expected_metadata(
         assert payload["melody_channel"] == 0
         assert payload["track_count"] == 4
         assert payload["bpm"] > 0
+        assert len(payload["note_durations"]) == payload["note_syllable_count"]
+        assert len(payload["syllable_durations"]) == payload["note_syllable_count"]
+        assert all(d > 0 for d in payload["syllable_durations"][:8])
         assert payload["strong_beat_positions"]
 
 
