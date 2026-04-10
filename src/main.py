@@ -76,6 +76,17 @@ def _setup_logging(verbose: bool = False) -> None:
 logger = logging.getLogger("main")
 
 
+def _create_demo():
+    """Build and return the Gradio Blocks demo."""
+    from gui.app import create_ui
+
+    return create_ui()
+
+
+# Expose a top-level demo object so the Gradio CLI can discover it.
+demo = _create_demo()
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -286,6 +297,7 @@ async def run_pipeline(
             result = await orch.run(
                 midi_path=midi_path,
                 reference_text=reference_text,
+                reference_text_kind="theme",
             )
     except Exception as exc:
         logger.exception("Pipeline crashed: %s", exc)
@@ -394,6 +406,7 @@ async def run_interactive(
                 result = await orch.run(
                     midi_path=str(midi_path),
                     reference_text=reference_text,
+                    reference_text_kind="theme",
                 )
         except Exception as exc:
             logger.exception("Pipeline error: %s", exc)
@@ -428,12 +441,8 @@ def main() -> int:
     # Apply CLI overrides to environment variables
     _apply_cli_overrides(args)
 
-    # CLI is now GUI-first. Keep --gui as a compatibility flag, but launch
-    # Gradio regardless so `python src/main.py` just works.
-    from gui.app import create_ui
-
-    app = create_ui()
-    app.launch(
+    # CLI is GUI-first. Launch the shared demo object directly.
+    demo.launch(
         server_name="0.0.0.0",
         server_port=args.port,
         share=False,
