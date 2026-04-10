@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 Main Gradio Blocks assembly.
 
@@ -17,33 +18,35 @@ def create_ui() -> gr.Blocks:
     """Create and configure the Gradio interface."""
 
     with gr.Blocks(title="Cantonese Lyrics Agent") as app:
+        gr.Markdown("## Cantonese Lyrics Agent")
         gr.Markdown(
-            """
-# 🎵 Cantonese Lyrics Agent
-
-AI-powered Cantonese lyrics generation from MIDI melodies.
-            """
+            "Generate Cantonese lyrics from MIDI, then review the pipeline output below."
         )
 
         with gr.Row():
-            with gr.Column(scale=1):
-                (
-                    midi_input,
-                    text_input,
-                    text_file_input,
-                    session_id_input,
-                    run_btn,
-                ) = build_input_panel()
+            with gr.Column(scale=1, min_width=320):
+                with gr.Group():
+                    gr.Markdown("### Input")
+                    (
+                        midi_input,
+                        text_input,
+                        text_file_input,
+                        session_id_input,
+                        run_btn,
+                    ) = build_input_panel()
 
-            with gr.Column(scale=2):
-                (
-                    progress_output,
-                    lyrics_output,
-                    activity_log,
-                    conversation_log,
-                    save_btn,
-                    save_path,
-                ) = build_output_panel()
+            with gr.Column(scale=2, min_width=520):
+                with gr.Group():
+                    gr.Markdown("### Output")
+                    (
+                        progress_output,
+                        agent_status_output,
+                        lyrics_output,
+                        activity_log,
+                        conversation_log,
+                        save_btn,
+                        save_path,
+                    ) = build_output_panel()
 
         # --- Event bindings ---
         # Gradio 6.x: pass the async generator function directly.
@@ -52,7 +55,13 @@ AI-powered Cantonese lyrics generation from MIDI melodies.
         run_btn.click(
             fn=run_pipeline_with_progress,
             inputs=[midi_input, text_input, text_file_input, session_id_input],
-            outputs=[progress_output, lyrics_output, activity_log, conversation_log],
+            outputs=[
+                progress_output,
+                agent_status_output,
+                lyrics_output,
+                activity_log,
+                conversation_log,
+            ],
         )
 
         save_btn.click(
