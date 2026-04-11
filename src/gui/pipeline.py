@@ -10,7 +10,6 @@ without duplicating orchestration business logic.
 from __future__ import annotations
 
 import logging
-import json
 from pathlib import Path
 import asyncio
 import time
@@ -112,56 +111,6 @@ def _format_activity_panel(events: list[dict[str, str]], status: str) -> str:
     
     return f"{timeline}\n\n**Details by Agent:**\n{details_html}"
 
-    lane_cards: list[str] = []
-    lane_keys = [k for k in _ACTOR_ORDER if k in grouped]
-    lane_keys.extend(k for k in grouped if k not in lane_keys)
-
-    for actor in lane_keys:
-        actor_events = grouped[actor][-6:]
-        items: list[str] = []
-        for ev in actor_events:
-            ts = escape(ev.get("time", ""))
-            typ = escape(ev.get("type", "event"))
-            detail = escape(ev.get("detail", "-")[:120])
-            items.append(
-                "<li style='margin:4px 0;'>"
-                f"<span style='opacity:.75'>{ts}</span> "
-                f"<strong>{typ}</strong>"
-                f"<div style='opacity:.9'>{detail}</div>"
-                "</li>"
-            )
-
-        lane_cards.append(
-            "<div style='border:1px solid #2f2f2f;border-radius:8px;padding:8px;background:#0f172a;'>"
-            f"<div style='font-weight:700;margin-bottom:6px'>{escape(actor)}</div>"
-            "<ul style='margin:0;padding-left:16px;font-size:12px;'>"
-            f"{''.join(items)}"
-            "</ul>"
-            "</div>"
-        )
-
-    return (
-        "<div style='border:1px solid #3a3a3a;border-radius:8px;overflow:auto;max-height:320px;'>"
-        f"<div style='padding:8px 10px;border-bottom:1px solid #2f2f2f;font-weight:700;'>Activity ({escape(status)})</div>"
-        "<div style='padding:10px;border-bottom:1px solid #2f2f2f;'>"
-        "<div style='font-weight:700;margin-bottom:8px;'>Agent Lanes</div>"
-        "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;'>"
-        f"{''.join(lane_cards)}"
-        "</div>"
-        "</div>"
-        "<div style='padding:10px 10px 6px;font-weight:700;'>Global Timeline</div>"
-        "<table style='width:100%;border-collapse:collapse;font-size:13px;'>"
-        "<thead><tr>"
-        "<th style='text-align:left;padding:6px 8px;'>Time</th>"
-        "<th style='text-align:left;padding:6px 8px;'>Event</th>"
-        "<th style='text-align:left;padding:6px 8px;'>Actor</th>"
-        "<th style='text-align:left;padding:6px 8px;'>Details</th>"
-        "</tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody>"
-        "</table>"
-        "</div>"
-    )
-
 
 def read_text_file(path: str, encoding: str | None = None) -> str:
     """Read a text file with encoding auto-detection."""
@@ -220,7 +169,6 @@ def _format_conversation_log(memory) -> str:
     
     for actor in section_keys:
         msgs = grouped_blocks[actor]
-        msg_count = len(msgs)
         user_count = sum(1 for m in msgs if m["type"] == "HumanMessage")
         ai_count = sum(1 for m in msgs if m["type"] == "AIMessage")
         
