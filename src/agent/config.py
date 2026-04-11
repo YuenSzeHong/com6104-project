@@ -251,8 +251,10 @@ MCP_SERVERS: list[MCPServerConfig] = [
     #   - analyze_melody_contour   : Full melody → 0243 tone sequence
     #   - get_tone_requirements    : Tone code for specific position
     #   - suggest_tone_sequence    : Simplified tone sequence string
-    #   - find_words_by_melody     : Find words matching melody tone
-    #   - find_phrase_words        : Find multi-syllable phrase matches
+    #
+    # Word lookup should go through the jyutping MCP server
+    # (`find_words_by_tone_code` / `find_tone_continuation`) so all
+    # 0243.hk query behavior is centralized in one toolchain.
     # ------------------------------------------------------------------
     MCPServerConfig(
         name="melody-mapper",
@@ -262,8 +264,6 @@ MCP_SERVERS: list[MCPServerConfig] = [
             "analyze_melody_contour",  # 完整旋律轮廓分析 → 0243 声调序列
             "get_tone_requirements",  # 获取特定位置的声调需求
             "suggest_tone_sequence",  # 简化版声调序列字符串
-            "find_words_by_melody",  # 根据旋律声调找词
-            "find_phrase_words",  # 多音节短语匹配
         ],
         description="旋律→0243 声调映射器 – 将 MIDI 旋律线映射到 0243.hk 精简声调系统",
     ),

@@ -598,6 +598,61 @@ def _map_pitch_to_0243(
     return base_tone
 
 
+def _rank_tone_candidates(
+    primary_tone: int,
+    *,
+    scale_degree: int,
+    contour: str,
+    is_strong_beat: bool,
+    is_phrase_end: bool,
+    duration: float,
+    median_duration: float,
+    max_candidates: int = 2,
+) -> list[int]:
+    """Return ranked 0243 candidates for one melody position.
+
+    0243 mapping is context-sensitive and commonly one-to-many in practice.
+    This ranking keeps the old deterministic tone as the first candidate and
+    adds nearby acceptable tones for lookup broadening.
+    """
+    ordered: list[int] = [primary_tone]
+
+    if contour == "rising":
+        ordered.extend([_TONE_2, _TONE_0, _TONE_4])
+    elif contour == "falling":
+        ordered.extend([_TONE_3, _TONE_4, _TONE_0])
+    elif contour == "level_high":
+        ordered.extend([_TONE_0, _TONE_4, _TONE_2])
+    elif contour == "level_low":
+        ordered.extend([_TONE_3, _TONE_4, _TONE_2])
+    else:
+        ordered.extend([_TONE_4, _TONE_0, _TONE_3])
+
+    if scale_degree >= 5:
+        ordered.extend([_TONE_0, _TONE_2, _TONE_4, _TONE_3])
+    elif scale_degree >= 2:
+        ordered.extend([_TONE_4, _TONE_2, _TONE_0, _TONE_3])
+    else:
+        ordered.extend([_TONE_3, _TONE_4, _TONE_2, _TONE_0])
+
+    if is_strong_beat:
+        ordered.extend([_TONE_0, _TONE_4, _TONE_2, _TONE_3])
+
+    if is_phrase_end:
+        ordered.extend([_TONE_4, _TONE_3, _TONE_0, _TONE_2])
+
+    if duration > median_duration * 1.5:
+        ordered.extend([_TONE_0, _TONE_4, _TONE_2, _TONE_3])
+
+    # Stable de-duplication and clamp to valid 0243 codes.
+    ranked: list[int] = []
+    for tone in ordered:
+        if tone in {_TONE_0, _TONE_2, _TONE_4, _TONE_3} and tone not in ranked:
+            ranked.append(tone)
+
+    return ranked[: max(1, max_candidates)]
+
+
 def _analyze_contour(
     syllables: list[dict],
     window: int = 3
@@ -783,7 +838,7 @@ async def analyze_melody_contour(file_path: str) -> str:
         durations = [s["duration_sec"] for s in syllables]
         median_dur = sorted(durations)[len(durations) // 2] if durations else 0.5
 
-        # Map each syllable to 0243 tone
+        # Keep payload compact: return only primary tone sequence here.
         tone_sequence = []
         for i, syl in enumerate(syllables):
             scale_deg = _normalize_pitch_to_scale(syl["note"], root, is_minor)
@@ -878,16 +933,23 @@ async def get_tone_requirements(file_path: str, position: int) -> str:
             median_duration=sorted([s["duration_sec"] for s in syllables])[len(syllables)//2],
         )
 
-        # Determine acceptable alternatives
-        alternatives = []
-        if primary_tone in _STABLE_TONES:
-            alternatives = [t for t in _STABLE_TONES if t != primary_tone]
-        else:
-            alternatives = [t for t in _FLOWING_TONES if t != primary_tone]
+        median_dur = sorted([s["duration_sec"] for s in syllables])[len(syllables) // 2]
+        tone_codes = _rank_tone_candidates(
+            primary_tone,
+            scale_degree=scale_deg,
+            contour=contours[position],
+            is_strong_beat=position in strong_beats,
+            is_phrase_end=position in phrase_ends,
+            duration=syl["duration_sec"],
+            median_duration=median_dur,
+            max_candidates=2,
+        )
+        alternatives = [t for t in tone_codes if t != primary_tone]
 
         result = {
             "position": position,
             "tone_code": primary_tone,
+            "tone_codes": tone_codes,
             "is_strong_beat": position in strong_beats,
             "is_phrase_end": position in phrase_ends,
             "contour": contours[position],
@@ -969,19 +1031,20 @@ async def find_words_by_melody(
 
         tone_code = str(req_result["tone_code"])
 
-        # Call 0243.hk API
+        # Keep this tool lightweight: single primary-tone lookup only.
         candidates = await _call_0243_api(tone_code)
+        if not isinstance(candidates, list):
+            candidates = []
 
-        # Filter to Chinese words only
-        chinese_words = [
+        merged = [
             c for c in candidates
-            if any('\u4e00' <= ch <= '\u9fff' for ch in c)
+            if any('\u4e00' <= ch <= '\u9fff' for ch in str(c))
         ][:count]
 
         return json.dumps({
             "position": position,
             "tone_code": tone_code,
-            "words": chinese_words,
+            "words": merged[:count],
             "alternatives": req_result.get("alternatives", []),
         })
 
@@ -1027,28 +1090,27 @@ async def find_phrase_words(
         if phrase_start + phrase_length > len(syllables):
             return json.dumps({"error": "Phrase extends beyond melody"})
 
-        # Get tone sequence for the phrase
-        tone_codes = []
+        # Build only primary-tone phrase code to keep query behavior predictable.
+        primary_codes: list[str] = []
         for i in range(phrase_start, phrase_start + phrase_length):
             req = json.loads(await get_tone_requirements(file_path, i))
             if "error" not in req:
-                tone_codes.append(str(req["tone_code"]))
+                primary_codes.append(str(req["tone_code"]))
 
-        tone_seq = "".join(tone_codes)
-
-        # Query 0243.hk for multi-syllable words
+        tone_seq = "".join(primary_codes)
         candidates = await _call_0243_api(tone_seq)
-
-        chinese_words = [
+        if not isinstance(candidates, list):
+            candidates = []
+        merged_words = [
             c for c in candidates
-            if any('\u4e00' <= ch <= '\u9fff' for ch in c)
+            if any('\u4e00' <= ch <= '\u9fff' for ch in str(c))
         ][:20]
 
         return json.dumps({
             "phrase_start": phrase_start,
             "phrase_length": phrase_length,
             "tone_sequence": tone_seq,
-            "words": chinese_words,
+            "words": merged_words[:20],
         })
 
     except Exception as exc:

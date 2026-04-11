@@ -11,7 +11,7 @@
   预期 lean 0243 序列：{tone_seq_str}
   强拍位置：{strong_str}
   押韵位置：{rhyme_str}
-  音符时值（秒，按顺序）：{syllable_durations_str}
+  音符时值（拍+音符值，quarter=1 beat）：{note_values_str}
   参考文本类型：{reference_text_kind_label}
   参考文本：{reference_text}
 

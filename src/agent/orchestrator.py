@@ -332,7 +332,7 @@ class AgentOrchestrator:
             self._transition_state(_STATE_MIDI_ANALYSIS)
             logger.info("Step 1a: 并行调用 MCP 工具分析 MIDI 文件…")
 
-            # 并行调用 MIDI analyzer 的两个工具
+            # 并行调用 MIDI analyzer 工具（结构 + 押韵 + 时值）
             midi_task = self._call_tool_direct_safe(
                 server_name="midi-analyzer",
                 tool_name="analyze_midi",
@@ -349,11 +349,24 @@ class AgentOrchestrator:
                 default=[],
                 event_callback=event_callback,
             )
+            durations_task = self._call_tool_direct_safe(
+                server_name="midi-analyzer",
+                tool_name="get_syllable_durations",
+                args={"file_path": str(midi_path)},
+                parse_json=True,
+                default=[],
+                event_callback=event_callback,
+            )
 
             # 等待所有任务完成
-            midi_analysis, rhyme_positions_raw = await asyncio.gather(
+            (
+                midi_analysis,
+                rhyme_positions_raw,
+                syllable_durations_raw,
+            ) = await asyncio.gather(
                 midi_task,
                 rhyme_task,
+                durations_task,
                 return_exceptions=True,
             )
 
@@ -361,7 +374,22 @@ class AgentOrchestrator:
             result.midi_analysis = (
                 midi_analysis if isinstance(midi_analysis, dict) else {}
             )
-            result.midi_analysis.setdefault("syllable_durations", [])
+
+            syllable_durations: list[float] = (
+                [
+                    float(value)
+                    for value in syllable_durations_raw
+                    if isinstance(value, int | float)
+                ]
+                if isinstance(syllable_durations_raw, list)
+                else []
+            )
+            if syllable_durations:
+                result.midi_analysis["syllable_durations"] = syllable_durations
+                result.midi_analysis["note_durations"] = syllable_durations
+            else:
+                result.midi_analysis.setdefault("syllable_durations", [])
+
             rhyme_positions: list[int] = (
                 rhyme_positions_raw if isinstance(rhyme_positions_raw, list) else []
             )
@@ -1407,7 +1435,6 @@ class AgentOrchestrator:
             and len(limited_positions) > self._word_selector_max_llm_calls
         )
 
-        midi_path = str(self._memory.get_pipeline_value("current_midi_path", ""))
         phrase_spans = self._build_phrase_spans(
             limited_positions,
             max_len=max(2, self._phrase_selector_max_len),
@@ -1416,26 +1443,33 @@ class AgentOrchestrator:
         # Tool calls are parallelized here by the orchestrator so we don't rely
         # on the model to discover/use parallel execution patterns.
         phrase_payload_map: dict[tuple[int, int], dict[str, Any]] = {}
-        if midi_path and phrase_spans:
-            phrase_tasks = [
-                self._call_tool_direct_safe(
-                    server_name="melody-mapper",
-                    tool_name="find_phrase_words",
-                    args={
-                        "file_path": midi_path,
-                        "phrase_start": start,
-                        "phrase_length": length,
-                    },
+        if phrase_spans and melody_tone_sequence:
+            phrase_codes: list[str] = []
+            valid_spans: list[tuple[int, int]] = []
+            for start, length in phrase_spans:
+                tone_slice = melody_tone_sequence[
+                    start:min(start + length, len(melody_tone_sequence))
+                ]
+                if len(tone_slice) != length:
+                    continue
+                phrase_codes.append("".join(str(t) for t in tone_slice))
+                valid_spans.append((start, length))
+
+            if phrase_codes:
+                phrase_results = await self._call_tool_direct_safe(
+                    server_name="jyutping",
+                    tool_name="find_words_by_tone_code",
+                    args={"code": phrase_codes},
                     parse_json=True,
-                    default={},
+                    default=[],
                     event_callback=event_callback,
                 )
-                for start, length in phrase_spans
-            ]
-            phrase_results = await asyncio.gather(*phrase_tasks)
-            for (start, length), payload in zip(phrase_spans, phrase_results):
-                if isinstance(payload, dict):
-                    phrase_payload_map[(start, length)] = payload
+
+                if isinstance(phrase_results, list):
+                    for i, span in enumerate(valid_spans):
+                        words = phrase_results[i] if i < len(phrase_results) else []
+                        if isinstance(words, list):
+                            phrase_payload_map[span] = {"words": words}
 
         # Phrase-first: one LLM decision can replace multiple character-level calls.
         phrase_specs: list[tuple[int, int, list[str]]] = []
@@ -1477,8 +1511,10 @@ class AgentOrchestrator:
 
             phrase_context = {
                 "position": f"第 {start + 1} 到第 {start + length} 字",
-                "surrounding_before": raw_lyrics[max(0, start - 5) : start],
-                "surrounding_after": raw_lyrics[start + length : start + length + 5],
+                "surrounding_before": raw_lyrics[max(0, start - 5):start],
+                "surrounding_after": raw_lyrics[
+                    start + length:start + length + 5
+                ],
                 "melody_tone": " ".join(
                     str(melody_tone_sequence[i])
                     for i in range(
@@ -1701,6 +1737,58 @@ class AgentOrchestrator:
             cursor += line_len
         return "\n".join(rebuilt_lines)
 
+    @staticmethod
+    def _nearest_note_value_label(beats: float) -> str:
+        """Map quarter-note beats to a nearest human-readable note value."""
+        if beats <= 0:
+            return "unknown"
+
+        candidates = [
+            (4.0, "whole"),
+            (3.0, "dotted-half"),
+            (2.0, "half"),
+            (1.5, "dotted-quarter"),
+            (1.0, "quarter"),
+            (0.75, "dotted-eighth"),
+            (2.0 / 3.0, "quarter-triplet"),
+            (0.5, "eighth"),
+            (1.0 / 3.0, "eighth-triplet"),
+            (0.25, "sixteenth"),
+        ]
+        nearest = min(candidates, key=lambda item: abs(item[0] - beats))
+        return nearest[1]
+
+    def _format_note_values(
+        self,
+        durations: list[Any],
+        bpm: Any,
+        syllable_count: int,
+    ) -> str:
+        """Format durations as quarter-note beats plus nearest note labels."""
+        try:
+            bpm_value = float(bpm)
+        except (TypeError, ValueError):
+            bpm_value = 0.0
+
+        if bpm_value <= 0:
+            return "（无）"
+
+        quarter_sec = 60.0 / bpm_value
+        if quarter_sec <= 0:
+            return "（无）"
+
+        formatted: list[str] = []
+        for value in durations[:syllable_count]:
+            try:
+                duration_sec = float(value)
+            except (TypeError, ValueError):
+                continue
+            beats = duration_sec / quarter_sec
+            label = self._nearest_note_value_label(beats)
+            formatted.append(f"{beats:.2f}b({label})")
+
+        return " ".join(formatted) if formatted else "（无）"
+
     def _build_compose_task(
         self,
         reference_text: str,
@@ -1753,13 +1841,10 @@ class AgentOrchestrator:
             " ".join(str(unit) for unit in embedded_lyrics_preview[:32])
             if embedded_lyrics_preview else "（无）"
         )
-        duration_str = (
-            " ".join(
-                f"{float(duration):.3f}"
-                for duration in syllable_durations[:syllable_count]
-            )
-            if syllable_durations
-            else "（无）"
+        note_values_str = self._format_note_values(
+            syllable_durations,
+            midi_analysis.get("bpm", 0),
+            syllable_count,
         )
 
         base = self._render_prompt_template(
@@ -1778,7 +1863,7 @@ class AgentOrchestrator:
             key=midi_analysis.get("key", "?"),
             strong_str=strong_str,
             rhyme_str=rhyme_str,
-            syllable_durations_str=duration_str,
+            note_values_str=note_values_str,
             melody_tone_seq_str=melody_tone_seq_str,
             selected_jp=selected_jp or "（未查询到）",
             reference_tone_seq_str=reference_tone_seq_str,
@@ -1823,13 +1908,10 @@ class AgentOrchestrator:
             " ".join(str(unit) for unit in embedded_lyrics_preview[:24])
             if embedded_lyrics_preview else "（无）"
         )
-        duration_str = (
-            " ".join(
-                f"{float(duration):.3f}"
-                for duration in syllable_durations[:syllable_count]
-            )
-            if syllable_durations
-            else "（无）"
+        note_values_str = self._format_note_values(
+            syllable_durations,
+            midi_analysis.get("bpm", 0),
+            syllable_count,
         )
 
         return self._render_prompt_template(
@@ -1850,7 +1932,7 @@ class AgentOrchestrator:
             embedded_lyric_unit_count=embedded_lyric_unit_count,
             effective_syllable_count_source=effective_syllable_count_source,
             embedded_lyrics_str=embedded_lyrics_str,
-            syllable_durations_str=duration_str,
+            note_values_str=note_values_str,
             tone_json=tone_json,
             strong_json=strong_json,
             rhyme_json=rhyme_json,
