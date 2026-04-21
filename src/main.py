@@ -443,7 +443,6 @@ def main() -> int:
 
     # CLI is GUI-first. Launch the shared demo object directly.
     demo.launch(
-        server_name="0.0.0.0",
         server_port=args.port,
         share=False,
         show_error=True,
