@@ -1316,7 +1316,19 @@ class AgentOrchestrator:
                 context={"server": server_name, "tool": tool_name, "args": args},
             )
 
-        logger.debug("_call_tool_direct: %s.%s(%s)", server_name, tool_name, args)
+        # Log direct tool call at INFO level
+        logger.info("[TOOL] Direct call: %s.%s(%s)", server_name, tool_name, args)
+
+        # Emit event for UI/progress display if possible
+        await self._emit_event(
+            getattr(self, "_event_callback", None),
+            {
+                "type": "tool_call",
+                "server": server_name,
+                "tool": tool_name,
+                "args": args,
+            },
+        )
 
         try:
             raw = await tool_obj.ainvoke(args)

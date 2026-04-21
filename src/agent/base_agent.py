@@ -448,11 +448,40 @@ class BaseAgent(ABC):
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     # This is a tool call message
                     for tc in msg.tool_calls:
+                        # Log to agent-specific logger
                         self._log.info(
                             "📝 [GUI] Agent → Tool: %s(%s)",
                             tc.get("name", "?"),
                             str(tc.get("args", {}))[:100],
                         )
+                        # Also log to main logger for console visibility
+                        logger = logging.getLogger("main")
+                        logger.info(
+                            "[AGENT TOOL CALL] %s → %s(%s)",
+                            self.name,
+                            tc.get("name", "?"),
+                            str(tc.get("args", {}))[:100],
+                        )
+                        # Emit pipeline event for UI/activity panel if orchestrator event callback is present
+                        event_callback = getattr(self, "_event_callback", None)
+                        if callable(event_callback):
+                            try:
+                                maybe_awaitable = event_callback(
+                                    {
+                                        "type": "agent_tool_call",
+                                        "agent": self.name,
+                                        "tool": tc.get("name", "?"),
+                                        "args": tc.get("args", {}),
+                                    }
+                                )
+                                if hasattr(maybe_awaitable, "__await__"):
+                                    import asyncio
+
+                                    asyncio.create_task(maybe_awaitable)
+                            except Exception as exc:
+                                logger.warning(
+                                    "Failed to emit agent tool call event: %s", exc
+                                )
                 elif content:
                     # This is a text response
                     self._log.info("📝 [GUI] Agent response: %r", content[:100])

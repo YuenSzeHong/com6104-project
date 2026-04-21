@@ -354,11 +354,28 @@ async def run_pipeline_with_progress(
                         if isinstance(score, (int, float)):
                             status_state["last_score"] = f"{float(score):.2f}"
 
+
+                    # Special handling for agent tool calls and direct tool calls
+                    if ev_type == "agent_tool_call":
+                        agent = str(event.get("agent", "agent"))
+                        tool = str(event.get("tool", "?"))
+                        args = event.get("args", {})
+                        detail = f"{agent} → {tool}({args})"
+                        actor = agent
+                    elif ev_type == "tool_call":
+                        server = str(event.get("server", "server"))
+                        tool = str(event.get("tool", "?"))
+                        args = event.get("args", {})
+                        detail = f"{server} [direct] → {tool}({args})"
+                        actor = server
+                    else:
+                        detail = ev_message or ev_step or "-"
+
                     recent_events.append(
                         {
                             "time": time.strftime("%H:%M:%S"),
                             "type": ev_type or "event",
-                            "detail": ev_message or ev_step or "-",
+                            "detail": detail,
                             "actor": actor,
                         }
                     )
